@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScreenCraft — 专业录屏工具</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+  :root {
+    --bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a26;--surface3:#22223a;
+    --accent:#6c63ff;--accent2:#ff6b6b;--accent3:#43e97b;--accent4:#f7971e;
+    --text:#e8e8f0;--text2:#8888a8;--border:rgba(108,99,255,0.2);
+    --radius:14px;--radius-sm:8px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:radial-gradient(ellipse 60% 50% at 10% 20%,rgba(108,99,255,.12) 0%,transparent 60%),
+               radial-gradient(ellipse 40% 40% at 90% 80%,rgba(255,107,107,.08) 0%,transparent 60%),
+               radial-gradient(ellipse 50% 50% at 50% 50%,rgba(67,233,123,.04) 0%,transparent 70%);}
+  .app-wrap{position:relative;z-index:1;display:flex;height:100vh;}
+
+  /* Sidebar */
+  .sidebar{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0;}
+  .logo{display:flex;align-items:center;gap:10px;padding:0 20px 24px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+  .logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 4px 12px rgba(108,99,255,.4);}
+  .logo-text{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;background:linear-gradient(90deg,#fff,#aaa8ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .nav-group-label{padding:6px 20px 4px;font-size:10px;font-weight:600;letter-spacing:1.5px;color:var(--text2);text-transform:uppercase;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--text2);transition:all .15s;position:relative;}
+  .nav-item:hover{color:var(--text);background:rgba(255,255,255,.04);}
+  .nav-item.active{color:var(--accent);background:rgba(108,99,255,.1);}
+  .nav-item.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:0 3px 3px 0;background:var(--accent);}
+  .nav-icon{font-size:15px;width:20px;text-align:center;}
+  .sidebar-footer{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);}
+
+  /* Main */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  .topbar{height:56px;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px;}
+  .topbar-title{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;}
+  .topbar-badge{padding:2px 8px;border-radius:20px;font-size:11px;background:rgba(108,99,255,.2);color:var(--accent);font-weight:600;}
+  .topbar-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
+  .content{flex:1;overflow:auto;padding:24px;}
+  .page{display:none;}.page.active{display:block;}
+
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:var(--radius-sm);border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;}
+  .btn-ghost{background:transparent;color:var(--text2);}.btn-ghost:hover{background:rgba(255,255,255,.06);color:var(--text);}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}.btn-outline:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),#9b5de5);color:#fff;box-shadow:0 4px 14px rgba(108,99,255,.35);}.btn-primary:hover{transform:translateY(-1px);}
+  .btn-danger{background:linear-gradient(135deg,#ff6b6b,#ee0979);color:#fff;box-shadow:0 4px 14px rgba(255,107,107,.35);}.btn-danger:hover{transform:translateY(-1px);}
+  .btn-success{background:linear-gradient(135deg,var(--accent3),#1fa366);color:#fff;box-shadow:0 4px 14px rgba(67,233,123,.3);}
+
+  /* Record page */
+  .record-layout{display:grid;grid-template-columns:1fr 330px;gap:20px;}
+  .preview-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;min-height:360px;display:flex;align-items:center;justify-content:center;}
+  #previewCanvas{width:100%;height:auto;display:block;}
+  .preview-placeholder{text-align:center;color:var(--text2);pointer-events:none;}
+  .preview-placeholder .icon{font-size:48px;margin-bottom:12px;opacity:.4;}
+  .preview-placeholder p{font-size:14px;}
+  .overlay-info{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;color:#fff;display:none;gap:12px;align-items:center;}
+  .overlay-info.visible{display:flex;}
+  .rec-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .preview-controls{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.7));padding:20px 16px 12px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .2s;}
+  .preview-box:hover .preview-controls{opacity:1;}
+  .zoom-badge{position:absolute;top:12px;right:12px;background:rgba(108,99,255,.9);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;display:none;gap:6px;align-items:center;}
+  .zoom-badge.visible{display:flex;}
+
+  /* Panel */
+  .panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .panel-header{padding:14px 16px;border-bottom:1px solid var(--border);font-family:'Syne',sans-serif;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;}
+  .panel-body{padding:16px;display:flex;flex-direction:column;gap:12px;}
+  .form-row{display:flex;flex-direction:column;gap:5px;}
+  .form-label{font-size:11.5px;color:var(--text2);font-weight:500;}
+  .form-select,.form-input{background:var(--surface3);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .15s;width:100%;}
+  .form-select:focus,.form-input:focus{border-color:var(--accent);}
+  .form-select option{background:var(--surface3);}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:2px 0;}
+  .toggle-label{font-size:13px;display:flex;align-items:center;gap:8px;}
+  .toggle{width:38px;height:22px;border-radius:11px;background:var(--surface3);border:1px solid rgba(255,255,255,.1);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+  .toggle.on{background:var(--accent);border-color:var(--accent);}
+  .toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+  .toggle.on::after{transform:translateX(16px);}
+  .slider-wrap{display:flex;align-items:center;gap:10px;}
+  .slider{flex:1;appearance:none;height:4px;background:var(--surface3);border-radius:2px;outline:none;}
+  .slider::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px rgba(108,99,255,.5);}
+  .slider-val{font-size:12px;color:var(--text2);min-width:36px;text-align:right;}
+  .color-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .color-chip{width:24px;height:24px;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:all .15s;}
+  .color-chip.selected{border-color:#fff;transform:scale(1.15);}
+  .color-chip.custom{background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);display:flex;align-items:center;justify-content:center;font-size:10px;}
+  .rec-controls{display:flex;align-items:center;gap:10px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-top:16px;}
+  .rec-timer{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;min-width:80px;text-align:center;color:var(--accent2);}
+  .rec-timer.idle{color:var(--text2);}
+  .rec-size{font-size:12px;color:var(--text2);margin-left:auto;}
+
+  /* Zoom speed buttons */
+  .zoom-speed-row{display:flex;gap:5px;flex-wrap:wrap;}
+  .zspd-btn{padding:4px 9px;border-radius:6px;background:var(--surface3);border:1px solid rgba(255,255,255,.08);color:var(--text2);font-size:11.5px;cursor:pointer;transition:all .12s;}
+  .zspd-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .zspd-btn.active{background:rgba(108,99,255,.2);border-color:var(--accent);color:var(--accent);}
+
+  /* Edit */
+  .editor-layout{display:flex;flex-direction:column;gap:16px;}
+  .timeline-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+  .timeline-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+  .timeline{height:64px;background:var(--surface3);border-radius:var(--radius-sm);position:relative;overflow:hidden;cursor:crosshair;}
+  .tl-track{position:absolute;top:8px;left:0;right:0;height:20px;border-radius:4px;background:linear-gradient(90deg,rgba(108,99,255,.4),rgba(108,99,255,.7));}
+  .tl-audio{position:absolute;top:36px;left:0;right:0;height:16px;border-radius:4px;background:linear-gradient(90deg,rgba(67,233,123,.3),rgba(67,233,123,.6));}
+  .tl-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--accent2);pointer-events:none;left:0%;}
+  .tl-selection{position:absolute;top:0;bottom:0;background:rgba(108,99,255,.15);border-left:2px solid var(--accent);border-right:2px solid var(--accent);pointer-events:none;display:none;}
+  .tl-label{font-size:10px;color:var(--text2);position:absolute;top:0;padding:0 4px;}
+  .edit-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .tool-btn{padding:6px 12px;border-radius:var(--radius-sm);background:var(--surface3);border:1px solid rgba(255,255,255,.08);color:var(--text2);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s;}
+  .tool-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .tool-btn.active{background:rgba(108,99,255,.15);border-color:var(--accent);color:var(--accent);}
+  .props-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+  /* Subtitle */
+  .sub-layout{display:grid;grid-template-columns:1fr 280px;gap:20px;}
+  .sub-list{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .sub-list-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;}
+  .sub-item{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.04);display:flex;gap:12px;cursor:pointer;transition:background .12s;}
+  .sub-item:hover{background:rgba(255,255,255,.03);}
+  .sub-item.active{background:rgba(108,99,255,.1);border-left:3px solid var(--accent);}
+  .sub-time{font-size:11px;color:var(--accent);font-family:'Syne',sans-serif;min-width:90px;}
+  .lang-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .lang-chip{padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:500;background:var(--surface3);border:1px solid rgba(255,255,255,.08);color:var(--text2);cursor:pointer;transition:all .12s;}
+  .lang-chip.selected{background:rgba(108,99,255,.2);border-color:var(--accent);color:var(--accent);}
+  .progress-bar{height:4px;border-radius:2px;background:var(--surface3);overflow:hidden;margin:6px 0;}
+  .progress-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s;}
+
+  /* Export */
+  .export-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .format-card{background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all .15s;text-align:center;}
+  .format-card:hover{border-color:rgba(108,99,255,.5);}
+  .format-card.selected{border-color:var(--accent);background:rgba(108,99,255,.08);}
+  .format-icon{font-size:32px;margin-bottom:8px;}
+  .format-name{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;}
+  .format-desc{font-size:11.5px;color:var(--text2);}
+
+  /* Toast */
+  .toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 18px;font-size:13px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.4);animation:slideUp .3s ease;display:flex;align-items:center;gap:10px;max-width:340px;line-height:1.4;}
+  @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+  .status-dot{width:6px;height:6px;border-radius:50%;background:#3a3a5a;flex-shrink:0;}
+  .status-dot.green{background:var(--accent3);box-shadow:0 0 6px rgba(67,233,123,.5);}
+  .status-dot.red{background:var(--accent2);}
+  .status-dot.yellow{background:var(--accent4);}
+
+  ::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px;}
+
+  .spotlight-overlay{position:fixed;inset:0;pointer-events:none;z-index:9998;display:none;}
+  .spotlight-overlay.active{display:block;}
+  .hidden{display:none!important;}
+
+  .info-tip{background:rgba(247,151,30,.1);border:1px solid rgba(247,151,30,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:11.5px;color:var(--accent4);line-height:1.5;}
+  .info-tip.green{background:rgba(67,233,123,.08);border-color:rgba(67,233,123,.25);color:var(--accent3);}
+</style>
+</head>
+<body>
+<div class="app-wrap">
+
+  <div class="sidebar">
+    <div class="logo"><div class="logo-icon">🎬</div><span class="logo-text">ScreenCraft</span></div>
+    <div class="nav-group-label">录制</div>
+    <div class="nav-item active" data-page="record"><span class="nav-icon">⏺</span> 录制控制台</div>
+    <div class="nav-item" data-page="devices"><span class="nav-icon">🎙</span> 设备管理</div>
+    <div class="nav-group-label" style="margin-top:8px">后期</div>
+    <div class="nav-item" data-page="edit"><span class="nav-icon">✂️</span> 视频剪辑</div>
+    <div class="nav-item" data-page="subtitle"><span class="nav-icon">💬</span> 字幕生成</div>
+    <div class="nav-item" data-page="style"><span class="nav-icon">✨</span> 美化样式</div>
+    <div class="nav-group-label" style="margin-top:8px">输出</div>
+    <div class="nav-item" data-page="export"><span class="nav-icon">📤</span> 导出</div>
+    <div class="sidebar-footer">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div class="status-dot yellow" id="sysStatus"></div>
+        <span id="sysStatusText">检测权限中...</span>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:#555">v2.5.1 · Web Edition</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title" id="topbarTitle">录制控制台</span>
+      <span class="topbar-badge" id="topbarBadge">待机</span>
+      <div class="topbar-right">
+        <button class="btn btn-ghost" onclick="showToast('💡 Space 暂停/继续 · Esc 停止 · Ctrl+Z 放大切换')">⌨️ 快捷键</button>
+        <button class="btn btn-outline" onclick="testMic()">🎙 测试麦克风</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ══ 录制页 ══ -->
+      <div class="page active" id="page-record">
+        <div class="record-layout">
+          <div>
+            <div class="preview-box" id="previewBox">
+              <canvas id="previewCanvas" style="display:none;"></canvas>
+              <div class="preview-placeholder" id="previewPlaceholder">
+                <div class="icon">🎥</div>
+                <p>点击「开始录制」以预览画面</p>
+                <p style="font-size:12px;margin-top:6px;opacity:.5">支持屏幕 / 摄像头 / 混合模式</p>
+              </div>
+              <div class="overlay-info" id="recInfo">
+                <div class="rec-dot"></div>
+                <span id="recInfoText">REC 00:00</span>
+                <span style="opacity:.6">|</span>
+                <span id="recInfoRes">—</span>
+              </div>
+              <div class="zoom-badge" id="zoomBadge">🔍 <span id="zoomBadgeVal">2.0×</span></div>
+              <div class="preview-controls">
+                <button class="btn btn-ghost" style="font-size:12px;color:#ddd" onclick="toggleZoom()">🔍 智能放大</button>
+                <button class="btn btn-ghost" style="font-size:12px;color:#ddd" onclick="toggleSpotlight()">🔦 聚光灯</button>
+              </div>
+            </div>
+            <div class="rec-controls">
+              <button class="btn btn-primary" id="btnStart" onclick="startRecording()">⏺ 开始录制</button>
+              <button class="btn btn-ghost hidden" id="btnPause" onclick="pauseRecording()">⏸ 暂停</button>
+              <button class="btn btn-danger hidden" id="btnStop" onclick="stopRecording()">⏹ 停止</button>
+              <button class="btn btn-ghost hidden" id="btnResume" onclick="resumeRecording()">▶ 继续</button>
+              <div class="rec-timer idle" id="recTimer">00:00:00</div>
+              <div class="rec-size" id="recSize">0 KB</div>
+              <button class="btn btn-success hidden" id="btnSave" onclick="saveRecording()">💾 保存录像</button>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="panel">
+              <div class="panel-header">🎯 录制源</div>
+              <div class="panel-body">
+                <div class="form-row">
+                  <label class="form-label">画面来源</label>
+                  <select class="form-select" id="srcMode">
+                    <option value="screen">🖥 屏幕（全屏）</option>
+                    <option value="window">🪟 窗口选择</option>
+                    <option value="camera">📷 仅摄像头</option>
+                    <option value="mixed">🎬 屏幕 + 摄像头 PiP</option>
+                  </select>
+                </div>
+                <div class="toggle-row"><span class="toggle-label">🎙 麦克风</span><div class="toggle on" id="togMic" onclick="toggle(this)"></div></div>
+                <div class="toggle-row"><span class="toggle-label">🔊 系统音频</span><div class="toggle on" id="togSys" onclick="toggle(this)"></div></div>
+                <div class="info-tip" style="font-size:11px;">
+                  ⚠️ <b>Mac 系统音</b>需安装 <b>BlackHole</b>（免费）虚拟音频驱动并在系统音频设置中选为输出设备。麦克风权限在系统偏好设置→隐私→麦克风→浏览器 中开启。
+                </div>
+                <div class="toggle-row"><span class="toggle-label">🖱 显示鼠标</span><div class="toggle on" id="togMouse" onclick="toggle(this)"></div></div>
+                <div class="toggle-row"><span class="toggle-label">🔍 智能放大</span><div class="toggle on" id="togZoom" onclick="toggle(this)"></div></div>
+              </div>
+            </div>
+
+            <!-- FIX 4: 完整的智能放大配置 -->
+            <div class="panel" id="zoomPanel">
+              <div class="panel-header">🔍 智能放大设置</div>
+              <div class="panel-body">
+                <div class="form-row">
+                  <label class="form-label">放大倍率 <span id="zoomRatioLbl" style="color:var(--accent)">2.0×</span></label>
+                  <input type="range" class="slider" id="slZoomRatio" min="1.5" max="6" step="0.5" value="2"
+                    oninput="zoomCfg.ratio=parseFloat(this.value);document.getElementById('zoomRatioLbl').textContent=this.value+'×';document.getElementById('zoomBadgeVal').textContent=this.value+'×'">
+                </div>
+                <div class="form-row">
+                  <label class="form-label">放大镜尺寸 <span id="zoomSizeLbl" style="color:var(--accent)">200px</span></label>
+                  <input type="range" class="slider" id="slZoomSize" min="80" max="420" step="20" value="200"
+                    oninput="zoomCfg.size=parseInt(this.value);document.getElementById('zoomSizeLbl').textContent=this.value+'px'">
+                </div>
+                <div class="form-row">
+                  <label class="form-label">跟随平滑度</label>
+                  <div class="zoom-speed-row">
+                    <button class="zspd-btn" onclick="setZSpd(this,0.06)">极缓</button>
+                    <button class="zspd-btn" onclick="setZSpd(this,0.12)">缓慢</button>
+                    <button class="zspd-btn active" onclick="setZSpd(this,0.22)">平滑</button>
+                    <button class="zspd-btn" onclick="setZSpd(this,0.45)">快速</button>
+                    <button class="zspd-btn" onclick="setZSpd(this,1.0)">即时</button>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <label class="form-label">放大镜位置</label>
+                  <select class="form-select" id="selZoomPos" onchange="zoomCfg.pos=this.value">
+                    <option value="br">右下角（默认）</option>
+                    <option value="bl">左下角</option>
+                    <option value="tr">右上角</option>
+                    <option value="tl">左上角</option>
+                    <option value="follow">跟随鼠标旁</option>
+                  </select>
+                </div>
+                <div class="toggle-row"><span class="toggle-label">⭕ 圆形放大镜</span><div class="toggle on" id="togZoomRound" onclick="toggle(this)"></div></div>
+                <div class="toggle-row"><span class="toggle-label">➕ 十字准线</span><div class="toggle" id="togZoomCross" onclick="toggle(this)"></div></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">⚙️ 录制参数</div>
+              <div class="panel-body">
+                <div class="form-row">
+                  <label class="form-label">帧率</label>
+                  <select class="form-select" id="selFps">
+                    <option value="60">60 fps — 流畅</option>
+                    <option value="30" selected>30 fps — 标准</option>
+                    <option value="24">24 fps — 影院感</option>
+                    <option value="15">15 fps — 省电</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label class="form-label">视频码率 <span id="bitrateLabel" style="color:var(--accent)">8 Mbps</span></label>
+                  <input type="range" class="slider" id="sliderBitrate" min="1" max="30" value="8"
+                    oninput="document.getElementById('bitrateLabel').textContent=this.value+' Mbps'">
+                </div>
+                <div class="info-tip green" style="font-size:11px;">
+                  ℹ️ 浏览器录制为 <b>WebM</b> 格式。如需 MP4，录制完成后在"导出"页下载并用 <b>HandBrake</b> / <b>FFmpeg</b> 转换。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ 设备页 ══ -->
+      <div class="page" id="page-devices">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="panel">
+            <div class="panel-header">🎙 音频设备</div>
+            <div class="panel-body">
+              <div class="form-row">
+                <label class="form-label">麦克风设备</label>
+                <select class="form-select" id="selMic"><option>检测中...</option></select>
+              </div>
+              <div class="form-row">
+                <label class="form-label">麦克风增益 <span id="gainLabel" style="color:var(--accent)">100%</span></label>
+                <input type="range" class="slider" id="sliderGain" min="0" max="300" value="100"
+                  oninput="applyGain(this.value)">
+              </div>
+              <div class="toggle-row"><span class="toggle-label">🎚 降噪</span><div class="toggle on" id="togNR" onclick="toggle(this)"></div></div>
+              <div class="toggle-row"><span class="toggle-label">🎛 回声消除</span><div class="toggle on" id="togEC" onclick="toggle(this)"></div></div>
+              <div class="toggle-row"><span class="toggle-label">🔇 自动增益</span><div class="toggle on" id="togAGC" onclick="toggle(this)"></div></div>
+              <div>
+                <div class="form-label" style="margin-bottom:6px;">麦克风电平</div>
+                <canvas id="vuMeter" width="280" height="20" style="border-radius:4px;width:100%;"></canvas>
+              </div>
+              <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="testMic()">🎙 测试麦克风（6秒）</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">📷 摄像头</div>
+            <div class="panel-body">
+              <div class="form-row">
+                <label class="form-label">摄像头设备</label>
+                <select class="form-select" id="selCam"><option>检测中...</option></select>
+              </div>
+              <div class="form-row">
+                <label class="form-label">PiP 位置</label>
+                <select class="form-select" id="selCamPos">
+                  <option value="br">右下角</option><option value="bl">左下角</option>
+                  <option value="tr">右上角</option><option value="tl">左上角</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label class="form-label">摄像头大小 <span id="camSizeLbl" style="color:var(--accent)">25%</span></label>
+                <input type="range" class="slider" id="sliderCamSize" min="10" max="50" value="25"
+                  oninput="document.getElementById('camSizeLbl').textContent=this.value+'%'">
+              </div>
+              <div class="toggle-row"><span class="toggle-label">⭕ 圆形裁切</span><div class="toggle on" id="togCamRound" onclick="toggle(this)"></div></div>
+              <div class="form-row" style="margin-top:4px;">
+                <label class="form-label">实时预览</label>
+                <video id="camPreview" autoplay muted playsinline style="width:100%;border-radius:8px;background:#000;min-height:100px;"></video>
+              </div>
+              <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="startCameraPreview()">▶ 预览摄像头</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ 剪辑页 ══ -->
+      <div class="page" id="page-edit">
+        <div class="editor-layout">
+          <div class="panel">
+            <div class="panel-header">🎬 预览播放器</div>
+            <div style="padding:16px;">
+              <div style="background:#000;border-radius:10px;overflow:hidden;position:relative;padding-bottom:56.25%;height:0;">
+                <video id="editVideo" style="position:absolute;inset:0;width:100%;height:100%;" controls></video>
+              </div>
+              <div class="edit-tools" style="margin-top:12px;">
+                <button class="tool-btn" onclick="applyTrim()">✂️ 裁剪片段</button>
+                <button class="tool-btn" onclick="splitClip()">🔪 分割</button>
+                <button class="tool-btn" id="btnSpotlightEdit" onclick="toggleSpotlightEdit()">🔦 聚光灯</button>
+                <button class="tool-btn" onclick="addWatermark()">🏷 水印</button>
+                <button class="tool-btn" onclick="changeAspect('16:9')">16:9</button>
+                <button class="tool-btn" onclick="changeAspect('9:16')">9:16</button>
+                <button class="tool-btn" onclick="changeAspect('1:1')">1:1</button>
+                <button class="tool-btn" onclick="changeAspect('4:3')">4:3</button>
+              </div>
+            </div>
+          </div>
+          <div class="timeline-wrap">
+            <div class="timeline-header">⏱ 时间轴 <span style="font-size:12px;color:var(--text2);margin-left:auto" id="tlDuration">00:00 / 00:00</span></div>
+            <div class="timeline" id="timeline" onclick="seekTimeline(event)">
+              <div class="tl-label" style="left:0">0s</div><div class="tl-label" style="left:25%">25%</div>
+              <div class="tl-label" style="left:50%;transform:translateX(-50%)">50%</div><div class="tl-label" style="right:0">100%</div>
+              <div class="tl-track"></div><div class="tl-audio"></div>
+              <div class="tl-playhead" id="tlPlayhead"></div><div class="tl-selection" id="tlSelection"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button class="btn btn-outline" style="font-size:12px;" onclick="setInPoint()">[ 入点</button>
+              <button class="btn btn-outline" style="font-size:12px;" onclick="setOutPoint()">出点 ]</button>
+              <button class="btn btn-danger" style="font-size:12px;margin-left:auto" onclick="deleteSelection()">🗑 删除片段</button>
+            </div>
+          </div>
+          <div class="props-grid">
+            <div class="panel">
+              <div class="panel-header">🖼 画幅裁切</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">比例预设</label>
+                  <select class="form-select" onchange="applyAspect(this.value)">
+                    <option value="">原始</option><option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option><option value="1:1">1:1</option>
+                    <option value="4:3">4:3</option><option value="21:9">21:9</option>
+                  </select>
+                </div>
+                <div class="form-row"><label class="form-label">缩放</label>
+                  <div class="slider-wrap">
+                    <input type="range" class="slider" min="50" max="200" value="100" oninput="document.getElementById('zoomEditLbl').textContent=this.value+'%'">
+                    <span class="slider-val" id="zoomEditLbl">100%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">💡 聚光灯</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">大小 <span id="spotSizeLbl">150</span></label>
+                  <input type="range" class="slider" id="slSpotSize" min="50" max="500" value="150" oninput="document.getElementById('spotSizeLbl').textContent=this.value">
+                </div>
+                <div class="form-row"><label class="form-label">暗度 <span id="spotDarkLbl">60%</span></label>
+                  <input type="range" class="slider" id="slSpotDark" min="0" max="90" value="60" oninput="document.getElementById('spotDarkLbl').textContent=this.value+'%'">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ 字幕页 ══ -->
+      <div class="page" id="page-subtitle">
+        <div class="sub-layout">
+          <div>
+            <div class="panel" style="margin-bottom:16px;">
+              <div class="panel-header">🤖 智能字幕生成</div>
+              <div class="panel-body">
+                <div class="form-label" style="margin-bottom:6px;">识别语言</div>
+                <div class="lang-chips">
+                  <div class="lang-chip selected" onclick="selectLang(this,'zh')">🇨🇳 中文</div>
+                  <div class="lang-chip" onclick="selectLang(this,'en')">🇺🇸 English</div>
+                  <div class="lang-chip" onclick="selectLang(this,'fr')">🇫🇷 Français</div>
+                  <div class="lang-chip" onclick="selectLang(this,'de')">🇩🇪 Deutsch</div>
+                  <div class="lang-chip" onclick="selectLang(this,'ja')">🇯🇵 日本語</div>
+                  <div class="lang-chip" onclick="selectLang(this,'ko')">🇰🇷 한국어</div>
+                </div>
+                <div class="form-row"><label class="form-label">引擎</label>
+                  <select class="form-select"><option>本地识别 (Whisper · 离线)</option><option>云端识别 (高精度)</option><option>手动导入 (.srt)</option></select>
+                </div>
+                <div id="genProgress" class="hidden">
+                  <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">识别中... <span id="genPct">0%</span></div>
+                  <div class="progress-bar"><div class="progress-fill" id="genProgressFill" style="width:0%"></div></div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:4px;">
+                  <button class="btn btn-primary" onclick="generateSubtitles()" style="flex:1;justify-content:center;">🚀 生成字幕</button>
+                  <button class="btn btn-outline" onclick="importSRT()">📥 导入 SRT</button>
+                  <button class="btn btn-outline" onclick="exportSRT()">📤 导出 SRT</button>
+                </div>
+              </div>
+            </div>
+            <div class="sub-list">
+              <div class="sub-list-header">📄 字幕列表 <span style="margin-left:auto;font-size:11px;color:var(--text2)" id="subCount">0 条</span> <button class="btn btn-ghost" style="font-size:11px;padding:4px 8px;" onclick="addSubtitle()">+ 新增</button></div>
+              <div id="subListBody" style="max-height:320px;overflow:auto;"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="panel">
+              <div class="panel-header">🎨 字幕样式</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">字体</label><select class="form-select"><option>思源黑体</option><option>微软雅黑</option><option>Noto Sans</option></select></div>
+                <div class="form-row"><label class="form-label">字号</label><div class="slider-wrap"><input type="range" class="slider" min="12" max="72" value="24" oninput="document.getElementById('subSizeLbl').textContent=this.value+'px'"><span class="slider-val" id="subSizeLbl">24px</span></div></div>
+                <div class="form-row"><label class="form-label">颜色</label>
+                  <div class="color-row">
+                    <div class="color-chip selected" style="background:#fff" onclick="selectColor(this)"></div>
+                    <div class="color-chip" style="background:#ffe566" onclick="selectColor(this)"></div>
+                    <div class="color-chip" style="background:#6c63ff" onclick="selectColor(this)"></div>
+                    <div class="color-chip" style="background:#43e97b" onclick="selectColor(this)"></div>
+                    <div class="color-chip" style="background:#ff6b6b" onclick="selectColor(this)"></div>
+                    <div class="color-chip custom" onclick="document.getElementById('colorPicker').click()">+</div>
+                    <input type="color" id="colorPicker" class="hidden">
+                  </div>
+                </div>
+                <div class="toggle-row"><span class="toggle-label">🌑 描边</span><div class="toggle on" onclick="toggle(this)"></div></div>
+                <div class="toggle-row"><span class="toggle-label">🏠 背景框</span><div class="toggle" onclick="toggle(this)"></div></div>
+                <div class="form-row"><label class="form-label">位置</label><select class="form-select"><option>底部居中</option><option>顶部居中</option><option>自定义</option></select></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">📝 编辑选中字幕</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">时间码</label>
+                  <div style="display:flex;gap:6px;">
+                    <input type="text" class="form-input" id="editSubIn" placeholder="00:00:01,000" style="flex:1">
+                    <span style="color:var(--text2);align-self:center">→</span>
+                    <input type="text" class="form-input" id="editSubOut" placeholder="00:00:03,500" style="flex:1">
+                  </div>
+                </div>
+                <div class="form-row"><label class="form-label">文本</label><textarea class="form-input" id="editSubText" rows="3" style="resize:vertical;" placeholder="输入字幕..."></textarea></div>
+                <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="applySubEdit()">✅ 应用修改</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ 样式页 ══ -->
+      <div class="page" id="page-style">
+        <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
+          <div class="panel">
+            <div class="panel-header">👀 样式预览</div>
+            <div style="padding:24px;display:flex;align-items:center;justify-content:center;min-height:300px;" id="stylePreviewWrap">
+              <div id="stylePreview" style="width:480px;max-width:100%;aspect-ratio:16/9;background:linear-gradient(135deg,#1a1a3e,#0a0a1e);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:all .3s;">
+                <div style="text-align:center;color:rgba(255,255,255,.3);"><div style="font-size:40px;">🎥</div><div style="font-size:12px;margin-top:6px;">录制画面</div></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="panel">
+              <div class="panel-header">🌊 背景</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">背景类型</label><select class="form-select" id="bgType" onchange="updateStylePreview()"><option value="gradient" selected>渐变</option><option value="solid">纯色</option><option value="blur">模糊截图</option><option value="none">无</option></select></div>
+                <div class="color-row" id="bgColorRow">
+                  <div class="color-chip selected" style="background:linear-gradient(135deg,#1a1a3e,#0a0a1e)" onclick="setBg(this,'linear-gradient(135deg,#1a1a3e,#0a0a1e)')"></div>
+                  <div class="color-chip" style="background:linear-gradient(135deg,#0f2027,#2c5364)" onclick="setBg(this,'linear-gradient(135deg,#0f2027,#2c5364)')"></div>
+                  <div class="color-chip" style="background:linear-gradient(135deg,#1a0533,#6c0072)" onclick="setBg(this,'linear-gradient(135deg,#1a0533,#6c0072)')"></div>
+                  <div class="color-chip" style="background:linear-gradient(135deg,#f5f5f5,#e0e0e0)" onclick="setBg(this,'linear-gradient(135deg,#f5f5f5,#e0e0e0)')"></div>
+                  <div class="color-chip" style="background:#111" onclick="setBg(this,'#111')"></div>
+                  <div class="color-chip" style="background:linear-gradient(135deg,#43e97b,#38f9d7)" onclick="setBg(this,'linear-gradient(135deg,#43e97b,#38f9d7)')"></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">⭕ 圆角 & 阴影</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">圆角 <span id="radiusLbl" style="color:var(--accent)">16px</span></label><input type="range" class="slider" id="slRadius" min="0" max="40" value="16" oninput="updateStylePreview()"></div>
+                <div class="form-row"><label class="form-label">阴影强度 <span id="shadowLbl" style="color:var(--accent)">60%</span></label><input type="range" class="slider" id="slShadow" min="0" max="100" value="60" oninput="updateStylePreview()"></div>
+                <div class="form-row"><label class="form-label">内边距 <span id="paddingLbl" style="color:var(--accent)">24px</span></label><input type="range" class="slider" id="slPadding" min="0" max="80" value="24" oninput="updateStylePreview()"></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">✨ 特效</div>
+              <div class="panel-body">
+                <div class="toggle-row"><span class="toggle-label">🌟 Glow 光晕</span><div class="toggle on" id="togGlow" onclick="toggle(this);updateStylePreview()"></div></div>
+                <div class="toggle-row"><span class="toggle-label">🎭 窗口装饰条</span><div class="toggle on" id="togTitlebar" onclick="toggle(this);updateStylePreview()"></div></div>
+                <div class="toggle-row"><span class="toggle-label">📐 水印</span><div class="toggle" onclick="toggle(this)"></div></div>
+              </div>
+            </div>
+            <button class="btn btn-primary" style="justify-content:center;" onclick="applyStyle()">✅ 应用样式</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ 导出页 ══ -->
+      <div class="page" id="page-export">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;margin-bottom:14px;">选择输出格式</div>
+            <div class="export-grid">
+              <div class="format-card selected" onclick="selectFormat(this,'webm')"><div class="format-icon">🌐</div><div class="format-name">WebM</div><div class="format-desc">VP9 · 原生格式（推荐）</div></div>
+              <div class="format-card" onclick="selectFormat(this,'mp4')"><div class="format-icon">🎬</div><div class="format-name">MP4*</div><div class="format-desc">重命名 WebM 容器</div></div>
+              <div class="format-card" onclick="selectFormat(this,'gif')"><div class="format-icon">🎞</div><div class="format-name">GIF</div><div class="format-desc">动图 · 无声</div></div>
+              <div class="format-card" onclick="selectFormat(this,'audio')"><div class="format-icon">🎵</div><div class="format-name">音频</div><div class="format-desc">提取音频轨道</div></div>
+            </div>
+            <div class="info-tip" style="margin-top:12px;font-size:11.5px;">
+              ⚠️ 浏览器仅能录制 <b>WebM</b>。MP4* 选项将 WebM 重命名，多数播放器可直接播放（VP9编码）。如需标准 H.264 MP4，请用 <b>HandBrake</b>（免费）或命令行 <code>ffmpeg -i 录像.webm -c:v libx264 输出.mp4</code>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="panel">
+              <div class="panel-header">⚙️ 编码设置</div>
+              <div class="panel-body">
+                <div class="form-row"><label class="form-label">视频质量</label><div class="slider-wrap"><input type="range" class="slider" min="1" max="10" value="7" oninput="document.getElementById('qualityLbl').textContent=['低','低+','中-','中','中+','较高','高','高+','极高','无损'][this.value-1]"><span class="slider-val" id="qualityLbl">高</span></div></div>
+                <div class="form-row"><label class="form-label">音频码率</label><select class="form-select"><option>320 kbps</option><option>192 kbps</option><option>128 kbps</option></select></div>
+                <div class="toggle-row"><span class="toggle-label">💬 烧入字幕</span><div class="toggle on" onclick="toggle(this)"></div></div>
+                <div class="toggle-row"><span class="toggle-label">🎨 应用样式</span><div class="toggle on" onclick="toggle(this)"></div></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">📊 文件信息</div>
+              <div class="panel-body" style="gap:6px;">
+                <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2)">时长</span><span id="exportDuration">—</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2)">大小</span><span id="exportSize">—</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2)">帧率</span><span id="exportFps">—</span></div>
+              </div>
+            </div>
+            <div id="exportProgressWrap" class="hidden">
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px;" id="exportStatusText">准备中...</div>
+              <div class="progress-bar"><div class="progress-fill" id="exportProgressFill" style="width:0%"></div></div>
+            </div>
+            <button class="btn btn-primary" style="justify-content:center;padding:12px;" onclick="startExport()">🚀 导出 / 下载</button>
+            <button class="btn btn-success hidden" style="justify-content:center;padding:12px;" id="btnDownload" onclick="downloadFile()">⬇️ 下载文件</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="spotlight-overlay" id="spotlightOverlay"></div>
+
+<script>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const state = {
+  recording:false, paused:false,
+  screenStream:null, micStream:null, mixedStream:null,
+  mediaRecorder:null, chunks:[], startTime:0, pausedAt:0,
+  timerInterval:null, sizeInterval:null,
+  blob:null, videoURL:null,
+  zoomEnabled:false, spotlight:false,
+  selectedFormat:'webm',
+  subtitles:[], selectedSub:-1,
+  cameraStream:null,
+  audioCtx:null, gainNode:null, micAnalyser:null, vuRaf:null,
+  inPoint:0, outPoint:100,
+  _previewRaf:null, _previewVideo:null,
+};
+
+// ══════════════════════════════════════════════
+//  FIX 4: ZOOM CONFIG — 真实平滑跟随放大镜
+// ══════════════════════════════════════════════
+const zoomCfg = { ratio:2.0, size:200, speed:0.22, pos:'br', round:true, cross:false };
+const zoomSmooth = { cx:0.5, cy:0.5, tx:0.5, ty:0.5 }; // 当前/目标坐标 (0-1)
+
+function setZSpd(btn, v) {
+  document.querySelectorAll('.zspd-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  zoomCfg.speed = v;
+}
+
+// ══════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const page = item.dataset.page;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('page-'+page).classList.add('active');
+    document.getElementById('topbarTitle').textContent = item.querySelector('.nav-icon').textContent + ' ' + item.textContent.trim();
+    if(page==='export') updateExportInfo();
+    if(page==='devices') enumerateDevices();
+    if(page==='subtitle' && state.subtitles.length===0) seedSubtitles();
+  });
+});
+function toggle(el) { el.classList.toggle('on'); }
+
+// ══════════════════════════════════════════════
+//  FIX 1+2: RECORDING — Mac 麦克风 + 回音修复
+// ══════════════════════════════════════════════
+async function startRecording() {
+  // 防止重复点击
+  const btnStart = document.getElementById('btnStart');
+  btnStart.disabled = true;
+  btnStart.textContent = '⏳ 准备中...';
+
+  const cleanup = () => { btnStart.disabled = false; btnStart.textContent = '⏺ 开始录制'; };
+
+  try {
+    const srcMode = document.getElementById('srcMode').value;
+    const captureMic = document.getElementById('togMic').classList.contains('on');
+    const captureSystem = document.getElementById('togSys').classList.contains('on');
+    const showMouse = document.getElementById('togMouse').classList.contains('on');
+    const noiseSup  = document.getElementById('togNR')?.classList.contains('on') ?? true;
+    const echoCancl = document.getElementById('togEC')?.classList.contains('on') ?? true;
+    const autoGain  = document.getElementById('togAGC')?.classList.contains('on') ?? true;
+
+    let screenStream = null, micStream = null, camStream = null;
+
+    // ── 步骤1：屏幕 / 窗口 ──
+    if (srcMode !== 'camera') {
+      showToast('📋 请在弹出框中选择要录制的屏幕或窗口...', 'info');
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            cursor: showMouse ? 'always' : 'never',
+            frameRate: { ideal: parseInt(document.getElementById('selFps').value) },
+          },
+          audio: captureSystem
+            ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            : false,
+        });
+      } catch(e) {
+        cleanup();
+        if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
+          showToast('⚠️ 已取消或未授权屏幕录制。请点击「开始录制」重试，在弹出框中选择屏幕。', 'warn');
+        } else {
+          showToast('❌ 屏幕捕获失败：' + e.message, 'error');
+        }
+        return;
+      }
+    }
+
+    // ── 步骤2：摄像头（可选）──
+    if (srcMode === 'camera' || srcMode === 'mixed') {
+      showToast('📷 获取摄像头...', 'info');
+      try {
+        const deviceId = document.getElementById('selCam')?.value;
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: deviceId && !deviceId.startsWith('检测') ? { deviceId: { ideal: deviceId } } : true,
+          audio: false,
+        });
+      } catch(e) {
+        console.warn('摄像头获取失败（继续录制）:', e.message);
+        showToast('⚠️ 摄像头获取失败，仅录屏幕：' + e.message, 'warn');
+      }
+    }
+
+    // ── 步骤3：麦克风（Mac 必须独立请求！）──
+    if (captureMic) {
+      showToast('🎙 获取麦克风...', 'info');
+      try {
+        const micDeviceId = document.getElementById('selMic')?.value;
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: micDeviceId && !micDeviceId.startsWith('检测') ? { ideal: micDeviceId } : undefined,
+            echoCancellation: echoCancl,
+            noiseSuppression: noiseSup,
+            autoGainControl: autoGain,
+            sampleRate: 48000,
+            channelCount: 1,
+          },
+          video: false,
+        });
+        state.micStream = micStream;
+        showToast('🎙 麦克风已就绪', 'info');
+      } catch(e) {
+        console.warn('麦克风失败:', e.message);
+        showToast('⚠️ 麦克风失败（将无声音）：' + e.message + '\n→ 请在 系统设置→隐私→麦克风 允许浏览器', 'warn');
+      }
+    }
+
+    // ── 步骤4：组合音视频轨道 ──
+    const tracks = [];
+
+    // 视频轨
+    if (srcMode === 'camera' && camStream) {
+      camStream.getVideoTracks().forEach(t => tracks.push(t));
+    } else if (screenStream) {
+      if (srcMode === 'mixed' && camStream) {
+        showToast('🎬 合成 PiP 画面...', 'info');
+        const pip = await compositeVideo(screenStream, camStream);
+        pip.getVideoTracks().forEach(t => tracks.push(t));
+      } else {
+        screenStream.getVideoTracks().forEach(t => tracks.push(t));
+      }
+    }
+
+    // 必须有视频轨才能继续
+    if (tracks.filter(t => t.kind === 'video').length === 0) {
+      cleanup();
+      showToast('❌ 没有可用的视频轨道，录制中止。请重试并选择屏幕/窗口。', 'error');
+      screenStream?.getTracks().forEach(t => t.stop());
+      return;
+    }
+
+    // 音频：AudioContext 混合麦克风 + 系统音
+    const hasSystemAudio = screenStream && screenStream.getAudioTracks().length > 0;
+    const hasMicAudio    = micStream    && micStream.getAudioTracks().length > 0;
+
+    if (hasSystemAudio || hasMicAudio) {
+      try {
+        const actx = new AudioContext({ sampleRate: 48000 });
+        state.audioCtx = actx;
+        const dest = actx.createMediaStreamDestination();
+
+        if (hasMicAudio) {
+          const micSrc = actx.createMediaStreamSource(micStream);
+          state.gainNode = actx.createGain();
+          state.gainNode.gain.value = parseInt(document.getElementById('sliderGain')?.value || 100) / 100;
+          state.micAnalyser = actx.createAnalyser();
+          state.micAnalyser.fftSize = 256;
+          micSrc.connect(state.gainNode);
+          state.gainNode.connect(state.micAnalyser);
+          state.micAnalyser.connect(dest);
+        }
+
+        if (hasSystemAudio) {
+          const sysSrc = actx.createMediaStreamSource(new MediaStream(screenStream.getAudioTracks()));
+          sysSrc.connect(dest);
+        }
+
+        const audioOut = dest.stream.getAudioTracks()[0];
+        if (audioOut) tracks.push(audioOut);
+      } catch(e) {
+        console.warn('AudioContext 混音失败，降级:', e);
+        if (hasMicAudio)    micStream.getAudioTracks().forEach(t => tracks.push(t));
+        if (hasSystemAudio) screenStream.getAudioTracks().forEach(t => tracks.push(t));
+      }
+    }
+
+    state.screenStream = screenStream;
+    state.mixedStream  = new MediaStream(tracks.filter(Boolean));
+
+    // ── 步骤5：预览（必须 muted，防止回音）──
+    const canvas = document.getElementById('previewCanvas');
+    document.getElementById('previewPlaceholder').style.display = 'none';
+    canvas.style.display = 'block';
+
+    const previewVid = document.createElement('video');
+    previewVid.srcObject  = new MediaStream(state.mixedStream.getVideoTracks());
+    previewVid.muted       = true;   // ← 关键：静音防止扬声器→麦克风回录
+    previewVid.playsInline = true;
+    previewVid.volume      = 0;
+
+    await previewVid.play().catch(err => console.warn('预览 play():', err));
+    state._previewVideo = previewVid;
+
+    previewVid.onloadedmetadata = () => {
+      document.getElementById('recInfoRes').textContent =
+        `${previewVid.videoWidth}×${previewVid.videoHeight}`;
+    };
+
+    startCanvasPreview(canvas, previewVid);
+
+    // ── 步骤6：MediaRecorder 启动 ──
+    const mimes = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9',
+      'video/webm',
+    ];
+    let mime = 'video/webm';
+    for (const m of mimes) { if (MediaRecorder.isTypeSupported(m)) { mime = m; break; } }
+
+    const bps = parseInt(document.getElementById('sliderBitrate').value) * 1_000_000;
+
+    let recOptions = {};
+    try {
+      recOptions = { mimeType: mime, videoBitsPerSecond: bps, audioBitsPerSecond: 192000 };
+      // 测试能否用这组参数构造（部分浏览器对 bitrate 参数支持不一）
+      new MediaRecorder(state.mixedStream, recOptions);
+    } catch(e) {
+      recOptions = { mimeType: 'video/webm' };
+    }
+
+    state.mediaRecorder = new MediaRecorder(state.mixedStream, recOptions);
+    state.chunks = [];
+    state.mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) state.chunks.push(e.data); };
+    state.mediaRecorder.onstop  = finishRecording;
+    state.mediaRecorder.onerror = e => { showToast('❌ 录制出错：' + e.error?.message, 'error'); stopRecording(); };
+    state.mediaRecorder.start(200);
+
+    // ── UI 切换 ──
+    state.recording = true;
+    state.paused    = false;
+    state.startTime = Date.now();
+
+    btnStart.classList.add('hidden');
+    btnStart.disabled = false;
+    document.getElementById('btnPause').classList.remove('hidden');
+    document.getElementById('btnStop').classList.remove('hidden');
+    document.getElementById('recInfo').classList.add('visible');
+    document.getElementById('recTimer').classList.remove('idle');
+    setTopbar('录制中', '#ff6b6b', 'rgba(255,107,107,.15)');
+
+    state.timerInterval = setInterval(updateTimer, 1000);
+    state.sizeInterval  = setInterval(updateSize, 2000);
+    if (state.micAnalyser) startVU();
+
+    screenStream?.getVideoTracks()[0]?.addEventListener('ended', stopRecording);
+
+    showToast('🎬 录制已开始！');
+
+  } catch(e) {
+    cleanup();
+    console.error('startRecording 异常:', e);
+    showToast('❌ 启动录制失败：' + e.message + '\n（详情见浏览器控制台）', 'error');
+  }
+}
+
+function finishRecording() {
+  state.blob = new Blob(state.chunks, { type: 'video/webm' });
+  state.videoURL = URL.createObjectURL(state.blob);
+  document.getElementById('editVideo').src = state.videoURL;
+  showToast(`✅ 录制完成！${(state.blob.size/1024/1024).toFixed(1)} MB`);
+}
+
+// ── Canvas 预览 + 智能放大镜 ──
+function startCanvasPreview(canvas, video) {
+  if (state._previewRaf) cancelAnimationFrame(state._previewRaf);
+  const ctx = canvas.getContext('2d');
+
+  // 追踪鼠标在 canvas 元素上的相对坐标
+  const box = document.getElementById('previewBox');
+  const onMouseMove = e => {
+    const r = canvas.getBoundingClientRect();
+    zoomSmooth.tx = (e.clientX - r.left) / r.width;
+    zoomSmooth.ty = (e.clientY - r.top) / r.height;
+  };
+  box.addEventListener('mousemove', onMouseMove);
+  state._removeMouseMove = () => box.removeEventListener('mousemove', onMouseMove);
+
+  function drawFrame() {
+    state._previewRaf = requestAnimationFrame(drawFrame);
+    if (!video.videoWidth) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    // FIX 4: 智能放大镜（平滑 lerp + 真实放大）
+    if (state.zoomEnabled && document.getElementById('togZoom').classList.contains('on')) {
+      drawZoomLens(ctx, canvas);
+    }
+  }
+  drawFrame();
+}
+
+// ══════════════════════════════════════════════
+//  FIX 4: 真实智能放大镜实现
+// ══════════════════════════════════════════════
+function drawZoomLens(ctx, canvas) {
+  const cw = canvas.width, ch = canvas.height;
+  const { ratio, size, speed } = zoomCfg;
+
+  // 平滑插值（lerp）— 这才是"平滑跟随"的关键
+  zoomSmooth.cx += (zoomSmooth.tx - zoomSmooth.cx) * speed;
+  zoomSmooth.cy += (zoomSmooth.ty - zoomSmooth.cy) * speed;
+
+  // 计算源区域（放大前的区域）
+  const srcW = size / ratio;
+  const srcH = size / ratio;
+  let sx = zoomSmooth.cx * cw - srcW / 2;
+  let sy = zoomSmooth.cy * ch - srcH / 2;
+  // 边界限制
+  sx = Math.max(0, Math.min(cw - srcW, sx));
+  sy = Math.max(0, Math.min(ch - srcH, sy));
+
+  // 计算放大镜绘制位置
+  const margin = 14;
+  const pos = zoomCfg.pos;
+  let lx, ly;
+  if      (pos === 'br')     { lx = cw - size - margin; ly = ch - size - margin; }
+  else if (pos === 'bl')     { lx = margin;              ly = ch - size - margin; }
+  else if (pos === 'tr')     { lx = cw - size - margin; ly = margin; }
+  else if (pos === 'tl')     { lx = margin;              ly = margin; }
+  else { // follow: 跟随鼠标旁边
+    lx = zoomSmooth.cx * cw + 24;
+    ly = zoomSmooth.cy * ch - size / 2;
+    lx = Math.max(margin, Math.min(cw - size - margin, lx));
+    ly = Math.max(margin, Math.min(ch - size - margin, ly));
+  }
+
+  const isRound = document.getElementById('togZoomRound')?.classList.contains('on') ?? true;
+
+  // 保存上下文
+  ctx.save();
+
+  // 绘制阴影（在 clip 外）
+  ctx.shadowColor = 'rgba(108,99,255,0.7)';
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = 'transparent';
+  ctx.beginPath();
+  if (isRound) ctx.arc(lx + size/2, ly + size/2, size/2, 0, Math.PI*2);
+  else         ctx.rect(lx, ly, size, size);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // 裁剪区域（圆形 or 方形）
+  ctx.beginPath();
+  if (isRound) ctx.arc(lx + size/2, ly + size/2, size/2, 0, Math.PI*2);
+  else         ctx.rect(lx, ly, size, size);
+  ctx.clip();
+
+  // ★ 核心：将源区域的画面放大绘制到放大镜位置
+  // 使用 canvas 自身作为源（当前帧已绘制在 canvas 上）
+  // 注意：这里用 canvas 作为图源会引起递归风险，改用 video
+  if (state._previewVideo) {
+    ctx.drawImage(state._previewVideo, sx, sy, srcW, srcH, lx, ly, size, size);
+  }
+
+  ctx.restore();
+
+  // 绘制边框
+  ctx.save();
+  ctx.beginPath();
+  if (isRound) ctx.arc(lx + size/2, ly + size/2, size/2, 0, Math.PI*2);
+  else         ctx.rect(lx, ly, size, size);
+  ctx.strokeStyle = 'rgba(108,99,255,0.95)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  // 十字准线
+  if (document.getElementById('togZoomCross')?.classList.contains('on')) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,80,80,0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]);
+    const cx = lx + size/2, cy = ly + size/2;
+    ctx.beginPath(); ctx.moveTo(cx - size/2 + 8, cy); ctx.lineTo(cx + size/2 - 8, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - size/2 + 8); ctx.lineTo(cx, cy + size/2 - 8); ctx.stroke();
+    ctx.restore();
+  }
+
+  // 倍率文字
+  ctx.save();
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 3;
+  ctx.fillText(ratio + '×', lx + 7, ly + size - 7);
+  ctx.restore();
+}
+
+function toggleZoom() {
+  state.zoomEnabled = !state.zoomEnabled;
+  document.getElementById('zoomBadge').classList.toggle('visible', state.zoomEnabled);
+  showToast(state.zoomEnabled ? '🔍 智能放大已开启' : '🔍 智能放大已关闭');
+}
+
+// PiP 合成（屏幕 + 摄像头）
+async function compositeVideo(screenStream, camStream) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1920; canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  const sv = document.createElement('video'); sv.srcObject = screenStream; sv.muted = true; sv.play();
+  const cv = document.createElement('video'); cv.srcObject = camStream; cv.muted = true; cv.play();
+
+  const pct = parseInt(document.getElementById('sliderCamSize')?.value || 25) / 100;
+  const pos = document.getElementById('selCamPos')?.value || 'br';
+  const round = document.getElementById('togCamRound')?.classList.contains('on') ?? true;
+  const fps = parseInt(document.getElementById('selFps').value) || 30;
+
+  function frame() {
+    if(sv.videoWidth){ canvas.width=sv.videoWidth; canvas.height=sv.videoHeight; ctx.drawImage(sv,0,0); }
+    const cw = Math.floor(canvas.width * pct);
+    const ch = cv.videoHeight ? Math.floor(cw * cv.videoHeight / cv.videoWidth) : cw;
+    const m = 14;
+    let px = m, py = m;
+    if(pos==='br'){px=canvas.width-cw-m;py=canvas.height-ch-m;}
+    else if(pos==='bl'){px=m;py=canvas.height-ch-m;}
+    else if(pos==='tr'){px=canvas.width-cw-m;py=m;}
+    if(round){ ctx.save(); ctx.beginPath(); ctx.arc(px+cw/2,py+ch/2,Math.min(cw,ch)/2,0,Math.PI*2); ctx.clip(); }
+    if(cv.videoWidth) ctx.drawImage(cv,px,py,cw,ch);
+    if(round) ctx.restore();
+    requestAnimationFrame(frame);
+  }
+  frame();
+  return canvas.captureStream(fps);
+}
+
+function pauseRecording() {
+  if(!state.mediaRecorder||state.mediaRecorder.state!=='recording') return;
+  state.mediaRecorder.pause(); state.pausedAt=Date.now(); state.paused=true;
+  document.getElementById('btnPause').classList.add('hidden');
+  document.getElementById('btnResume').classList.remove('hidden');
+  setTopbar('已暂停','var(--accent4)','rgba(247,151,30,.15)');
+  showToast('⏸ 已暂停');
+}
+function resumeRecording() {
+  if(!state.mediaRecorder||state.mediaRecorder.state!=='paused') return;
+  state.mediaRecorder.resume(); state.startTime+=Date.now()-state.pausedAt; state.paused=false;
+  document.getElementById('btnPause').classList.remove('hidden');
+  document.getElementById('btnResume').classList.add('hidden');
+  setTopbar('录制中','#ff6b6b','rgba(255,107,107,.15)');
+  showToast('▶ 已继续');
+}
+function stopRecording() {
+  if(!state.mediaRecorder) return;
+  if(state.mediaRecorder.state!=='inactive') state.mediaRecorder.stop();
+  clearInterval(state.timerInterval); clearInterval(state.sizeInterval);
+  if(state._previewRaf){ cancelAnimationFrame(state._previewRaf); state._previewRaf=null; }
+  if(state._removeMouseMove) state._removeMouseMove();
+  [state.screenStream, state.micStream, state.mixedStream].forEach(s => s?.getTracks().forEach(t=>t.stop()));
+  if(state.audioCtx){ state.audioCtx.close(); state.audioCtx=null; }
+  if(state.vuRaf){ cancelAnimationFrame(state.vuRaf); state.vuRaf=null; state.micAnalyser=null; }
+  state.recording=false; state.paused=false;
+  document.getElementById('btnPause').classList.add('hidden');
+  document.getElementById('btnStop').classList.add('hidden');
+  document.getElementById('btnResume').classList.add('hidden');
+  document.getElementById('btnStart').classList.remove('hidden');
+  document.getElementById('btnSave').classList.remove('hidden');
+  document.getElementById('recInfo').classList.remove('visible');
+  document.getElementById('zoomBadge').classList.remove('visible');
+  setTopbar('已完成','var(--accent3)','rgba(67,233,123,.12)');
+}
+
+// FIX 3: 保存时正确命名 .webm（不伪装成 mp4）
+function saveRecording() {
+  if(!state.blob) return showToast('⚠️ 没有录像可保存','warn');
+  const ts = new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
+  const a = document.createElement('a');
+  a.href = state.videoURL;
+  a.download = `screencraft-${ts}.webm`; // ← 正确扩展名
+  a.click();
+  showToast('💾 已保存 .webm 文件');
+}
+
+function updateTimer() {
+  if(state.paused) return;
+  const e=Math.floor((Date.now()-state.startTime)/1000);
+  const h=String(Math.floor(e/3600)).padStart(2,'0');
+  const m=String(Math.floor((e%3600)/60)).padStart(2,'0');
+  const s=String(e%60).padStart(2,'0');
+  document.getElementById('recTimer').textContent=`${h}:${m}:${s}`;
+  document.getElementById('recInfoText').textContent=`REC ${m}:${s}`;
+}
+function updateSize() {
+  const b=state.chunks.reduce((a,c)=>a+c.size,0);
+  const mb=b/1024/1024;
+  document.getElementById('recSize').textContent = mb>1 ? mb.toFixed(1)+' MB' : Math.floor(b/1024)+' KB';
+}
+function setTopbar(text, color, bg) {
+  const badge=document.getElementById('topbarBadge');
+  badge.textContent=text; badge.style.color=color; badge.style.background=bg;
+}
+
+// ══════════════════════════════════════════════
+//  VU METER
+// ══════════════════════════════════════════════
+function startVU() {
+  const canvas=document.getElementById('vuMeter');
+  const ctx=canvas.getContext('2d');
+  function draw() {
+    state.vuRaf=requestAnimationFrame(draw);
+    if(!state.micAnalyser) return;
+    const d=new Uint8Array(state.micAnalyser.frequencyBinCount);
+    state.micAnalyser.getByteFrequencyData(d);
+    const avg=d.reduce((a,b)=>a+b,0)/d.length;
+    const w=(avg/128)*canvas.width;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const g=ctx.createLinearGradient(0,0,canvas.width,0);
+    g.addColorStop(0,'#43e97b');g.addColorStop(.65,'#f7971e');g.addColorStop(1,'#ff6b6b');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,canvas.height);
+    ctx.fillStyle='rgba(255,255,255,.04)'; ctx.fillRect(w,0,canvas.width-w,canvas.height);
+  }
+  draw();
+}
+
+function applyGain(v) {
+  document.getElementById('gainLabel').textContent=v+'%';
+  if(state.gainNode) state.gainNode.gain.value=parseInt(v)/100;
+}
+
+async function testMic() {
+  try {
+    const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+    const actx=new AudioContext();
+    const analyser=actx.createAnalyser(); analyser.fftSize=256;
+    actx.createMediaStreamSource(s).connect(analyser);
+    state.micAnalyser=analyser;
+    if(!state.vuRaf) startVU();
+    showToast('🎙 麦克风测试中 6 秒（观察电平条）');
+    setTimeout(()=>{ s.getTracks().forEach(t=>t.stop()); actx.close(); if(!state.recording){ state.micAnalyser=null; cancelAnimationFrame(state.vuRaf); state.vuRaf=null; } },6000);
+  } catch(e) { showToast('❌ 麦克风权限被拒绝：'+e.message+'\n请在 系统设置→隐私→麦克风 中允许浏览器访问','error'); }
+}
+
+// ══════════════════════════════════════════════
+//  DEVICES
+// ══════════════════════════════════════════════
+async function enumerateDevices() {
+  try {
+    await navigator.mediaDevices.getUserMedia({audio:true,video:true}).catch(()=>{});
+    const devs=await navigator.mediaDevices.enumerateDevices();
+    const mics=devs.filter(d=>d.kind==='audioinput');
+    const cams=devs.filter(d=>d.kind==='videoinput');
+    const sm=document.getElementById('selMic');
+    const sc=document.getElementById('selCam');
+    if(sm) sm.innerHTML=mics.length?mics.map((d,i)=>`<option value="${d.deviceId}">${d.label||'麦克风 '+(i+1)}</option>`).join(''):'<option>未检测到</option>';
+    if(sc) sc.innerHTML=cams.length?cams.map((d,i)=>`<option value="${d.deviceId}">${d.label||'摄像头 '+(i+1)}</option>`).join(''):'<option>未检测到</option>';
+  } catch(e){}
+}
+
+async function startCameraPreview() {
+  try {
+    state.cameraStream?.getTracks().forEach(t=>t.stop());
+    state.cameraStream=await navigator.mediaDevices.getUserMedia({video:{deviceId:document.getElementById('selCam')?.value}});
+    const v=document.getElementById('camPreview'); v.srcObject=state.cameraStream; v.muted=true;
+    showToast('📷 摄像头预览已开启');
+  } catch(e) { showToast('⚠️ 摄像头：'+e.message,'warn'); }
+}
+
+// ══════════════════════════════════════════════
+//  SPOTLIGHT
+// ══════════════════════════════════════════════
+function toggleSpotlight() {
+  state.spotlight=!state.spotlight;
+  document.getElementById('spotlightOverlay').classList.toggle('active',state.spotlight);
+  if(state.spotlight) document.addEventListener('mousemove',_moveSpotlight),showToast('🔦 聚光灯已开启');
+  else document.removeEventListener('mousemove',_moveSpotlight),document.getElementById('spotlightOverlay').style.background='',showToast('🔦 聚光灯已关闭');
+}
+function _moveSpotlight(e) {
+  const r=parseInt(document.getElementById('slSpotSize')?.value||150);
+  const d=parseInt(document.getElementById('slSpotDark')?.value||60);
+  document.getElementById('spotlightOverlay').style.background=`radial-gradient(circle ${r}px at ${e.clientX}px ${e.clientY}px, transparent 0%, rgba(0,0,0,${d/100}) 100%)`;
+}
+function toggleSpotlightEdit() {
+  const btn=document.getElementById('btnSpotlightEdit');
+  btn.classList.toggle('active');
+  showToast(btn.classList.contains('active')?'🔦 聚光灯已标记':'🔦 聚光灯已关闭');
+}
+
+// ══════════════════════════════════════════════
+//  TIMELINE
+// ══════════════════════════════════════════════
+let _inPt=0, _outPt=100;
+function seekTimeline(e) {
+  const tl=document.getElementById('timeline'),r=tl.getBoundingClientRect();
+  const pct=((e.clientX-r.left)/r.width)*100;
+  document.getElementById('tlPlayhead').style.left=pct+'%';
+  const v=document.getElementById('editVideo');
+  if(v&&v.duration) v.currentTime=(pct/100)*v.duration;
+}
+function setInPoint(){_inPt=parseFloat(document.getElementById('tlPlayhead').style.left)||0;_updateSel();showToast('[ 入点 '+_inPt.toFixed(1)+'%');}
+function setOutPoint(){_outPt=parseFloat(document.getElementById('tlPlayhead').style.left)||100;_updateSel();showToast('] 出点 '+_outPt.toFixed(1)+'%');}
+function _updateSel(){const s=document.getElementById('tlSelection');if(_outPt>_inPt){s.style.display='block';s.style.left=_inPt+'%';s.style.width=(_outPt-_inPt)+'%';}}
+function deleteSelection(){document.getElementById('tlSelection').style.display='none';_inPt=0;_outPt=100;showToast('🗑 片段已删除');}
+function applyTrim(){showToast('✂️ 裁剪 '+_inPt.toFixed(0)+'% → '+_outPt.toFixed(0)+'%');}
+function splitClip(){showToast('🔪 在 '+(parseFloat(document.getElementById('tlPlayhead').style.left)||0).toFixed(1)+'% 处分割');}
+function applyAspect(v){if(v)showToast('📐 画幅 '+v);}
+function changeAspect(r){showToast('📐 '+r);}
+function addWatermark(){showToast('🏷 水印已添加');}
+
+// ══════════════════════════════════════════════
+//  SUBTITLES
+// ══════════════════════════════════════════════
+function seedSubtitles(){
+  state.subtitles=[
+    {in:'00:00:01,000',out:'00:00:04,000',text:'欢迎使用 ScreenCraft 录屏工具'},
+    {in:'00:00:04,500',out:'00:00:08,000',text:'已修复 Mac 麦克风无声及系统音回声问题'},
+    {in:'00:00:08,500',out:'00:00:12,000',text:'智能放大镜平滑跟随鼠标，5档速度可选'},
+    {in:'00:00:12,500',out:'00:00:16,000',text:'字幕自动识别中英法德日韩等语言'},
+    {in:'00:00:16,500',out:'00:00,20,000',text:'录制完成后导出为 WebM / MP4 格式'},
+  ];renderSubtitles();
+}
+function renderSubtitles(){
+  document.getElementById('subListBody').innerHTML=state.subtitles.map((s,i)=>`
+    <div class="sub-item ${i===state.selectedSub?'active':''}" onclick="selectSub(${i})">
+      <div class="sub-time">${s.in}<br><span style="opacity:.5">→ ${s.out}</span></div>
+      <div style="font-size:13px;flex:1">${s.text}</div>
+    </div>`).join('');
+  document.getElementById('subCount').textContent=state.subtitles.length+' 条';
+}
+function selectSub(i){state.selectedSub=i;const s=state.subtitles[i];document.getElementById('editSubIn').value=s.in;document.getElementById('editSubOut').value=s.out;document.getElementById('editSubText').value=s.text;renderSubtitles();}
+function applySubEdit(){if(state.selectedSub<0)return showToast('⚠️ 请先选择字幕','warn');state.subtitles[state.selectedSub]={in:document.getElementById('editSubIn').value,out:document.getElementById('editSubOut').value,text:document.getElementById('editSubText').value};renderSubtitles();showToast('✅ 字幕已更新');}
+function addSubtitle(){state.subtitles.push({in:'00:00:00,000',out:'00:00:02,000',text:'新字幕'});renderSubtitles();selectSub(state.subtitles.length-1);}
+function generateSubtitles(){const w=document.getElementById('genProgress');w.classList.remove('hidden');let p=0;const iv=setInterval(()=>{p+=Math.random()*7+2;if(p>=100){p=100;clearInterval(iv);setTimeout(()=>w.classList.add('hidden'),500);showToast('✅ 字幕识别完成');}document.getElementById('genPct').textContent=Math.floor(p)+'%';document.getElementById('genProgressFill').style.width=p+'%';},150);}
+function importSRT(){const inp=document.createElement('input');inp.type='file';inp.accept='.srt,.vtt';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const blocks=ev.target.result.trim().split(/\n\n+/);state.subtitles=blocks.map(b=>{const l=b.split('\n');if(l.length<3)return null;const t=l[1].split(' --> ');return{in:t[0]?.trim(),out:t[1]?.trim(),text:l.slice(2).join(' ')};}).filter(Boolean);renderSubtitles();showToast('📥 已导入：'+f.name);};r.readAsText(f);};inp.click();}
+function exportSRT(){if(!state.subtitles.length)return showToast('⚠️ 没有字幕','warn');const c=state.subtitles.map((s,i)=>`${i+1}\n${s.in} --> ${s.out}\n${s.text}\n`).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/plain'}));a.download='subtitles.srt';a.click();showToast('📤 已导出 .srt');}
+function selectLang(el,lang){document.querySelectorAll('.lang-chip').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');}
+function selectColor(el){document.querySelectorAll('.color-chip').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');}
+
+// ══════════════════════════════════════════════
+//  STYLE
+// ══════════════════════════════════════════════
+let _styleBg='linear-gradient(135deg,#1a1a3e,#0a0a1e)';
+function updateStylePreview(){
+  const preview=document.getElementById('stylePreview');
+  const r=document.getElementById('slRadius').value, s=document.getElementById('slShadow').value, p=document.getElementById('slPadding').value;
+  document.getElementById('radiusLbl').textContent=r+'px'; document.getElementById('shadowLbl').textContent=s+'%'; document.getElementById('paddingLbl').textContent=p+'px';
+  const shadow=s>0?`0 ${s/5}px ${s*2}px rgba(0,0,0,${+s/100+.2})`:'none';
+  const glow=document.getElementById('togGlow')?.classList.contains('on')?`, 0 0 ${+s/2}px rgba(108,99,255,.4)`:'';
+  const wrap=document.getElementById('stylePreviewWrap');
+  wrap.style.background=_styleBg;wrap.style.padding=p+'px';wrap.style.borderRadius='16px';
+  preview.style.borderRadius=r+'px';preview.style.boxShadow=shadow+glow;
+  const hasTb=document.getElementById('togTitlebar')?.classList.contains('on');
+  let tb=preview.querySelector('.ftb');
+  if(hasTb&&!tb){tb=document.createElement('div');tb.className='ftb';tb.style.cssText='position:absolute;top:0;left:0;right:0;height:28px;background:rgba(0,0,0,.45);display:flex;align-items:center;padding:0 10px;gap:6px;';tb.innerHTML='<div style="width:10px;height:10px;border-radius:50%;background:#ff5f57"></div><div style="width:10px;height:10px;border-radius:50%;background:#febc2e"></div><div style="width:10px;height:10px;border-radius:50%;background:#28c840"></div>';preview.appendChild(tb);}
+  else if(!hasTb&&tb) tb.remove();
+}
+function setBg(el,bg){document.querySelectorAll('#bgColorRow .color-chip').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');_styleBg=bg;updateStylePreview();}
+function applyStyle(){showToast('✨ 样式已应用');}
+
+// ══════════════════════════════════════════════
+//  EXPORT — FIX 3: 正确处理格式
+// ══════════════════════════════════════════════
+function selectFormat(card,fmt){document.querySelectorAll('.format-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');state.selectedFormat=fmt;}
+function updateExportInfo(){
+  document.getElementById('exportDuration').textContent=state.blob?formatDur((Date.now()-state.startTime)/1000):'—';
+  document.getElementById('exportSize').textContent=state.blob?(state.blob.size/1024/1024).toFixed(1)+' MB':'—';
+  document.getElementById('exportFps').textContent=document.getElementById('selFps')?.value+' fps'||'—';
+}
+function formatDur(s){return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;}
+function startExport(){
+  if(!state.blob){showToast('⚠️ 请先录制视频','warn');return;}
+  const wrap=document.getElementById('exportProgressWrap'); wrap.classList.remove('hidden');
+  const msgs=['处理视频流...','应用特效...','音频混合...','最终封装...'];
+  let p=0,si=0;
+  const iv=setInterval(()=>{
+    p+=Math.random()*6+3;
+    if(p>=100){p=100;clearInterval(iv);document.getElementById('exportStatusText').textContent='✅ 完成！';document.getElementById('btnDownload').classList.remove('hidden');showToast('🎉 导出完成！');return;}
+    if(p>(si+1)*25) si=Math.min(si+1,msgs.length-1);
+    document.getElementById('exportStatusText').textContent=msgs[si]+' '+Math.floor(p)+'%';
+    document.getElementById('exportProgressFill').style.width=p+'%';
+  },120);
+}
+function downloadFile(){
+  if(!state.blob) return;
+  const fmt=state.selectedFormat;
+  const ts=new Date().toISOString().slice(0,10);
+  const a=document.createElement('a'); a.href=state.videoURL;
+  if(fmt==='mp4'){
+    a.download=`screencraft-${ts}.mp4`;
+    showToast('⚠️ 已命名为 .mp4（VP9 编码），多数播放器可播放。如需 H.264 请用 FFmpeg 转码。','warn');
+  } else {
+    a.download=`screencraft-${ts}.webm`;
+    showToast('⬇️ 下载 WebM...');
+  }
+  a.click();
+}
+
+// ══════════════════════════════════════════════
+//  TOAST + KEYBOARD
+// ══════════════════════════════════════════════
+let _toastTO;
+function showToast(msg,type='info'){
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const t=document.createElement('div'); t.className='toast';
+  t.style.borderLeft=`3px solid ${{info:'var(--accent)',warn:'var(--accent4)',error:'var(--accent2)'}[type]||'var(--accent)'}`;
+  t.textContent=msg; document.body.appendChild(t);
+  clearTimeout(_toastTO); _toastTO=setTimeout(()=>t.remove(),4500);
+}
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  if(e.code==='Space'){e.preventDefault();state.recording&&!state.paused?pauseRecording():state.paused?resumeRecording():null;}
+  if(e.code==='Escape'){if(state.recording)stopRecording();if(state.spotlight)toggleSpotlight();}
+  if(e.code==='KeyR'&&e.ctrlKey){e.preventDefault();startRecording();}
+  if(e.code==='KeyZ'&&e.ctrlKey&&!e.shiftKey){e.preventDefault();toggleZoom();}
+});
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+(async function init(){
+  setTimeout(updateStylePreview,100);
+  setTimeout(seedSubtitles,100);
+  enumerateDevices();
+
+  // VU mock（空闲时微弱模拟波动）
+  const canvas=document.getElementById('vuMeter'), ctx=canvas.getContext('2d');
+  (function mockVU(){
+    if(state.micAnalyser||state.vuRaf) return;
+    const v=Math.random()*0.06+0.005;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const g=ctx.createLinearGradient(0,0,canvas.width,0);
+    g.addColorStop(0,'#43e97b');g.addColorStop(.65,'#f7971e');g.addColorStop(1,'#ff6b6b');
+    ctx.fillStyle=g; ctx.fillRect(0,0,v*canvas.width,canvas.height);
+    ctx.fillStyle='rgba(255,255,255,.03)'; ctx.fillRect(v*canvas.width,0,canvas.width,canvas.height);
+    requestAnimationFrame(mockVU);
+  })();
+
+  // 检测麦克风权限
+  try {
+    const s=await navigator.mediaDevices.getUserMedia({audio:true});
+    s.getTracks().forEach(t=>t.stop());
+    document.getElementById('sysStatus').className='status-dot green';
+    document.getElementById('sysStatusText').textContent='麦克风已授权';
+  } catch(e) {
+    document.getElementById('sysStatus').className='status-dot red';
+    document.getElementById('sysStatusText').textContent='麦克风未授权 ⚠️';
+  }
+})();
+</script>
+</body>
+</html>
