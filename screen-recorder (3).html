@@ -254,7 +254,7 @@
                   ⚠️ <b>Mac 系统音</b>需安装 <b>BlackHole</b>（免费）虚拟音频驱动并在系统音频设置中选为输出设备。麦克风权限在系统偏好设置→隐私→麦克风→浏览器 中开启。
                 </div>
                 <div class="toggle-row"><span class="toggle-label">🖱 显示鼠标</span><div class="toggle on" id="togMouse" onclick="toggle(this)"></div></div>
-                <div class="toggle-row"><span class="toggle-label">🔍 智能放大</span><div class="toggle on" id="togZoom" onclick="toggle(this)"></div></div>
+                <div class="toggle-row"><span class="toggle-label">🔍 智能放大</span><div class="toggle on" id="togZoom" onclick="toggleZoom()"></div></div>
               </div>
             </div>
 
@@ -285,11 +285,11 @@
                 <div class="form-row">
                   <label class="form-label">放大镜位置</label>
                   <select class="form-select" id="selZoomPos" onchange="zoomCfg.pos=this.value">
-                    <option value="br">右下角（默认）</option>
+                    <option value="br">右下角</option>
                     <option value="bl">左下角</option>
                     <option value="tr">右上角</option>
                     <option value="tl">左上角</option>
-                    <option value="follow">跟随鼠标旁</option>
+                    <option value="follow" selected>跟随鼠标旁（默认）</option>
                   </select>
                 </div>
                 <div class="toggle-row"><span class="toggle-label">⭕ 圆形放大镜</span><div class="toggle on" id="togZoomRound" onclick="toggle(this)"></div></div>
@@ -427,12 +427,13 @@
                     <option value="4:3">4:3</option><option value="21:9">21:9</option>
                   </select>
                 </div>
-                <div class="form-row"><label class="form-label">缩放</label>
+                <div class="form-row"><label class="form-label">缩放预览</label>
                   <div class="slider-wrap">
-                    <input type="range" class="slider" min="50" max="200" value="100" oninput="document.getElementById('zoomEditLbl').textContent=this.value+'%'">
+                    <input type="range" class="slider" id="slZoomEdit" min="50" max="300" value="100" oninput="document.getElementById('zoomEditLbl').textContent=this.value+'%';applyEditZoom(this.value)">
                     <span class="slider-val" id="zoomEditLbl">100%</span>
                   </div>
                 </div>
+                <div style="font-size:11px;color:var(--text2);">💡 鼠标悬停视频确定缩放中心，滑动放大后可看到缩放效果</div>
               </div>
             </div>
             <div class="panel">
@@ -631,7 +632,7 @@ const state = {
   mediaRecorder:null, chunks:[], startTime:0, pausedAt:0,
   timerInterval:null, sizeInterval:null,
   blob:null, videoURL:null,
-  zoomEnabled:false, spotlight:false,
+  zoomEnabled:true, spotlight:false,
   selectedFormat:'webm',
   subtitles:[], selectedSub:-1,
   cameraStream:null,
@@ -643,7 +644,7 @@ const state = {
 // ══════════════════════════════════════════════
 //  FIX 4: ZOOM CONFIG — 真实平滑跟随放大镜
 // ══════════════════════════════════════════════
-const zoomCfg = { ratio:2.0, size:200, speed:0.22, pos:'br', round:true, cross:false };
+const zoomCfg = { ratio:2.0, size:200, speed:0.22, pos:'follow', round:true, cross:false };
 const zoomSmooth = { cx:0.5, cy:0.5, tx:0.5, ty:0.5 }; // 当前/目标坐标 (0-1)
 
 function setZSpd(btn, v) {
@@ -924,8 +925,8 @@ function startCanvasPreview(canvas, video) {
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
 
-    // 智能放大镜（平滑 lerp + 真实放大）— 直接以 togZoom 状态为准
-    if (document.getElementById('togZoom').classList.contains('on')) {
+    // 智能放大镜（以 state.zoomEnabled 为唯一判据）
+    if (state.zoomEnabled) {
       drawZoomLens(ctx, canvas);
     }
   }
@@ -1030,10 +1031,9 @@ function drawZoomLens(ctx, canvas) {
 }
 
 function toggleZoom() {
-  // 同步 togZoom 开关状态与 state.zoomEnabled
-  const togEl = document.getElementById('togZoom');
-  togEl.classList.toggle('on');
-  state.zoomEnabled = togEl.classList.contains('on');
+  state.zoomEnabled = !state.zoomEnabled;
+  // 保持侧边栏开关与状态同步
+  document.getElementById('togZoom').classList.toggle('on', state.zoomEnabled);
   document.getElementById('zoomBadge').classList.toggle('visible', state.zoomEnabled);
   showToast(state.zoomEnabled ? '🔍 智能放大已开启' : '🔍 智能放大已关闭');
 }
@@ -1345,25 +1345,94 @@ function _dragZoomRange(e, idx) {
   document.addEventListener('mouseup', onUp);
 }
 
-// 播放时自动跳过已删除片段
-document.getElementById('editVideo').addEventListener('timeupdate', function() {
-  const v = this;
-  if (!v.duration) return;
-  for (const r of deletedRanges) {
-    if (r.start === null) { r.start = (r.startPct / 100) * v.duration; r.end = (r.endPct / 100) * v.duration; }
-    if (v.currentTime >= r.start && v.currentTime < r.end) { v.currentTime = r.end; break; }
+// ── 剪辑器缩放 ──
+let _editZoomOriginX = 50, _editZoomOriginY = 50;
+let _autoZoomActive = false; // 标记是否由关键帧自动控制缩放
+
+function applyEditZoom(pct) {
+  const v = document.getElementById('editVideo');
+  const s = parseInt(pct) / 100;
+  if (s <= 1.01) {
+    v.style.transform = '';
+    v.style.transformOrigin = '';
+  } else {
+    v.style.transform = `scale(${s})`;
+    v.style.transformOrigin = `${_editZoomOriginX}% ${_editZoomOriginY}%`;
   }
-  // 同步时间轴播放头
-  const pct = (v.currentTime / v.duration) * 100;
-  document.getElementById('tlPlayhead').style.left = pct + '%';
-  const m = String(Math.floor(v.currentTime/60)).padStart(2,'0');
-  const s = String(Math.floor(v.currentTime%60)).padStart(2,'0');
-  const dm = String(Math.floor(v.duration/60)).padStart(2,'0');
-  const ds = String(Math.floor(v.duration%60)).padStart(2,'0');
-  document.getElementById('tlDuration').textContent = m+':'+s+' / '+dm+':'+ds;
+}
+
+// 鼠标在视频上移动时，更新缩放原点（让用户把鼠标移到想放大的区域）
+document.getElementById('editVideo').addEventListener('mousemove', function(e) {
+  const r = this.getBoundingClientRect();
+  _editZoomOriginX = ((e.clientX - r.left) / r.width) * 100;
+  _editZoomOriginY = ((e.clientY - r.top) / r.height) * 100;
+  const slider = document.getElementById('slZoomEdit');
+  if (slider && parseInt(slider.value) > 100) {
+    this.style.transformOrigin = `${_editZoomOriginX}% ${_editZoomOriginY}%`;
+  }
 });
 
-function applyTrim(){showToast('✂️ 裁剪 '+_inPt.toFixed(0)+'% → '+_outPt.toFixed(0)+'%');}
+// 播放时自动跳过已删除片段 + 应用缩放关键帧
+document.getElementById('editVideo').addEventListener('timeupdate', function() {
+  const v = this;
+  if (!v.duration || isNaN(v.duration)) return;
+
+  // 1. 跳过已删除片段
+  for (const r of deletedRanges) {
+    if (r.start === null || isNaN(r.start)) {
+      r.start = (r.startPct / 100) * v.duration;
+      r.end   = (r.endPct   / 100) * v.duration;
+    }
+    if (v.currentTime >= r.start && v.currentTime < r.end) {
+      v.currentTime = r.end;
+      break;
+    }
+  }
+
+  // 2. 应用缩放关键帧效果（zoom ranges 在播放时驱动 CSS transform）
+  const timePct = (v.currentTime / v.duration) * 100;
+  const activeZoom = zoomRanges.find(zr => timePct >= zr.startPct && timePct <= zr.endPct);
+  const slider = document.getElementById('slZoomEdit');
+  if (activeZoom) {
+    _autoZoomActive = true;
+    const pct = Math.round(activeZoom.ratio * 100);
+    if (slider) { slider.value = pct; document.getElementById('zoomEditLbl').textContent = pct + '%'; }
+    applyEditZoom(pct);
+  } else if (_autoZoomActive) {
+    // 离开关键帧范围后恢复
+    _autoZoomActive = false;
+    if (slider) { slider.value = 100; document.getElementById('zoomEditLbl').textContent = '100%'; }
+    applyEditZoom(100);
+  }
+
+  // 3. 同步时间轴播放头 + 时长显示
+  const pct2 = (v.currentTime / v.duration) * 100;
+  document.getElementById('tlPlayhead').style.left = pct2 + '%';
+  const fmt = t => [Math.floor(t/60), Math.floor(t%60)].map(n=>String(n).padStart(2,'0')).join(':');
+  document.getElementById('tlDuration').textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
+});
+
+// 裁剪：将入点之前和出点之后加入删除列表（播放时自动跳过两端）
+let _trimRange = null;
+function applyTrim() {
+  if (_outPt <= _inPt) { showToast('⚠️ 请先设置有效的入点和出点', 'warn'); return; }
+  const v = document.getElementById('editVideo');
+  _trimRange = { inPct: _inPt, outPct: _outPt };
+  // 入点前和出点后加入删除列表
+  if (_inPt > 0) {
+    deletedRanges = deletedRanges.filter(r => !(r.startPct === 0 && r.endPct === _inPt));
+    deletedRanges.push({ startPct: 0, endPct: _inPt, start: null, end: null });
+  }
+  if (_outPt < 100) {
+    deletedRanges = deletedRanges.filter(r => !(r.startPct === _outPt && r.endPct === 100));
+    deletedRanges.push({ startPct: _outPt, endPct: 100, start: null, end: null });
+  }
+  deletedRanges.sort((a, b) => a.startPct - b.startPct);
+  _renderDeletedRanges();
+  // 跳转到入点开始播放
+  if (v && v.duration) v.currentTime = (_inPt / 100) * v.duration;
+  showToast(`✂️ 已裁剪保留 ${_inPt.toFixed(0)}% → ${_outPt.toFixed(0)}%`);
+}
 function splitClip(){showToast('🔪 在 '+(parseFloat(document.getElementById('tlPlayhead').style.left)||0).toFixed(1)+'% 处分割');}
 function applyAspect(v){if(v)showToast('📐 画幅 '+v);}
 function changeAspect(r){showToast('📐 '+r);}
