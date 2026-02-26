@@ -386,6 +386,7 @@
             <div style="padding:16px;">
               <div style="background:#000;border-radius:10px;overflow:hidden;position:relative;padding-bottom:56.25%;height:0;">
                 <video id="editVideo" style="position:absolute;inset:0;width:100%;height:100%;" controls></video>
+                <canvas id="editCanvas" style="position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none;"></canvas>
               </div>
               <div class="edit-tools" style="margin-top:12px;">
                 <button class="tool-btn" onclick="applyTrim()">✂️ 裁剪片段</button>
@@ -638,7 +639,13 @@ const state = {
   audioCtx:null, gainNode:null, micAnalyser:null, vuRaf:null,
   inPoint:0, outPoint:100,
   _previewRaf:null, _previewVideo:null,
+  _expACtx:null, _expADst:null,
 };
+
+// Edit page canvas preview globals
+let _editRaf = null;
+const editMouse = { tx:0.5, ty:0.5, cx:0.5, cy:0.5 };
+let _exportBlob = null, _exportURL = null;
 
 // ══════════════════════════════════════════════
 //  FIX 4: ZOOM CONFIG — 真实平滑跟随放大镜
@@ -897,7 +904,9 @@ async function startRecording() {
 function finishRecording() {
   state.blob = new Blob(state.chunks, { type: 'video/webm' });
   state.videoURL = URL.createObjectURL(state.blob);
-  document.getElementById('editVideo').src = state.videoURL;
+  const ev = document.getElementById('editVideo');
+  ev.src = state.videoURL;
+  ev.addEventListener('loadedmetadata', () => startEditPreview(), { once: true });
   showToast(`✅ 录制完成！${(state.blob.size/1024/1024).toFixed(1)} MB`);
 }
 
@@ -1036,6 +1045,114 @@ function toggleZoom() {
   state.zoomEnabled = togEl.classList.contains('on');
   document.getElementById('zoomBadge').classList.toggle('visible', state.zoomEnabled);
   showToast(state.zoomEnabled ? '🔍 智能放大已开启' : '🔍 智能放大已关闭');
+}
+
+// ── 通用放大镜绘制（用于剪辑预览和导出）──
+function _drawZoomOverlay(ctx, canvas, videoSrc, cx, cy, ratio) {
+  const cw = canvas.width, ch = canvas.height;
+  const size = zoomCfg.size;
+  const srcW = size / ratio, srcH = size / ratio;
+  let sx = cx * cw - srcW / 2;
+  let sy = cy * ch - srcH / 2;
+  sx = Math.max(0, Math.min(cw - srcW, sx));
+  sy = Math.max(0, Math.min(ch - srcH, sy));
+
+  const margin = 14;
+  const pos = zoomCfg.pos;
+  let lx, ly;
+  if      (pos === 'br') { lx = cw - size - margin; ly = ch - size - margin; }
+  else if (pos === 'bl') { lx = margin;              ly = ch - size - margin; }
+  else if (pos === 'tr') { lx = cw - size - margin; ly = margin; }
+  else if (pos === 'tl') { lx = margin;              ly = margin; }
+  else {
+    lx = cx * cw + 24;
+    ly = cy * ch - size / 2;
+    lx = Math.max(margin, Math.min(cw - size - margin, lx));
+    ly = Math.max(margin, Math.min(ch - size - margin, ly));
+  }
+
+  const isRound = document.getElementById('togZoomRound')?.classList.contains('on') ?? true;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(108,99,255,0.7)';
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = 'transparent';
+  ctx.beginPath();
+  if (isRound) ctx.arc(lx + size/2, ly + size/2, size/2, 0, Math.PI*2);
+  else         ctx.rect(lx, ly, size, size);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.beginPath();
+  if (isRound) ctx.arc(lx + size/2, ly + size/2, size/2, 0, Math.PI*2);
+  else         ctx.rect(lx, ly, size, size);
+  ctx.clip();
+  ctx.drawImage(videoSrc, sx, sy, srcW, srcH, lx, ly, size, size);
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  if (isRound) ctx.arc(lx + size/2, ly + size/2, size/2, 0, Math.PI*2);
+  else         ctx.rect(lx, ly, size, size);
+  ctx.strokeStyle = 'rgba(108,99,255,0.95)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 3;
+  ctx.fillText(ratio + '×', lx + 7, ly + size - 7);
+  ctx.restore();
+}
+
+// ── 剪辑页 Canvas 预览（鼠标跟踪 + 缩放关键帧渲染）──
+function startEditPreview() {
+  if (_editRaf) { cancelAnimationFrame(_editRaf); _editRaf = null; }
+  const video = document.getElementById('editVideo');
+  const canvas = document.getElementById('editCanvas');
+  if (!canvas || !video) return;
+
+  const ctx = canvas.getContext('2d');
+  const container = canvas.parentElement;
+
+  // 重置鼠标坐标
+  editMouse.tx = 0.5; editMouse.ty = 0.5;
+  editMouse.cx = 0.5; editMouse.cy = 0.5;
+
+  const onEditMouse = e => {
+    const r = canvas.getBoundingClientRect();
+    editMouse.tx = (e.clientX - r.left) / r.width;
+    editMouse.ty = (e.clientY - r.top) / r.height;
+  };
+  container.addEventListener('mousemove', onEditMouse);
+
+  function loop() {
+    _editRaf = requestAnimationFrame(loop);
+    if (!video.videoWidth) return;
+
+    // 平滑插值
+    editMouse.cx += (editMouse.tx - editMouse.cx) * 0.22;
+    editMouse.cy += (editMouse.ty - editMouse.cy) * 0.22;
+
+    const curPct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+    const activeZoom = zoomRanges.find(r => curPct >= r.startPct && curPct < r.endPct);
+
+    if (activeZoom) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      _drawZoomOverlay(ctx, canvas, video, editMouse.cx, editMouse.cy, activeZoom.ratio);
+      canvas.style.display = 'block';
+    } else {
+      // 无激活缩放区间时隐藏 canvas 叠层
+      if (canvas.style.display !== 'none') canvas.style.display = 'none';
+    }
+  }
+
+  loop();
 }
 
 // PiP 合成（屏幕 + 摄像头）
@@ -1429,29 +1546,124 @@ function updateExportInfo(){
   document.getElementById('exportFps').textContent=document.getElementById('selFps')?.value+' fps'||'—';
 }
 function formatDur(s){return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;}
-function startExport(){
-  if(!state.blob){showToast('⚠️ 请先录制视频','warn');return;}
-  const wrap=document.getElementById('exportProgressWrap'); wrap.classList.remove('hidden');
-  const msgs=['处理视频流...','应用特效...','音频混合...','最终封装...'];
-  let p=0,si=0;
-  const iv=setInterval(()=>{
-    p+=Math.random()*6+3;
-    if(p>=100){p=100;clearInterval(iv);document.getElementById('exportStatusText').textContent='✅ 完成！';document.getElementById('btnDownload').classList.remove('hidden');showToast('🎉 导出完成！');return;}
-    if(p>(si+1)*25) si=Math.min(si+1,msgs.length-1);
-    document.getElementById('exportStatusText').textContent=msgs[si]+' '+Math.floor(p)+'%';
-    document.getElementById('exportProgressFill').style.width=p+'%';
-  },120);
+async function startExport() {
+  if (!state.blob) { showToast('⚠️ 请先录制视频', 'warn'); return; }
+
+  const wrap = document.getElementById('exportProgressWrap');
+  wrap.classList.remove('hidden');
+  document.getElementById('btnDownload').classList.add('hidden');
+  document.getElementById('exportStatusText').textContent = '准备导出...';
+  document.getElementById('exportProgressFill').style.width = '0%';
+
+  const video = document.getElementById('editVideo');
+  if (!video.duration) {
+    await new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+  }
+
+  const cw = video.videoWidth || 1920;
+  const ch = video.videoHeight || 1080;
+  const fps = parseInt(document.getElementById('selFps')?.value || '30');
+
+  // 离屏 canvas 用于渲染带特效的帧
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = cw; offCanvas.height = ch;
+  const ctx = offCanvas.getContext('2d');
+
+  const canvasStream = offCanvas.captureStream(fps);
+
+  // 尝试捕获音频（每个 video 元素只能绑定一次 AudioContext）
+  let finalStream = canvasStream;
+  try {
+    if (!state._expACtx) {
+      state._expACtx = new AudioContext();
+      const src = state._expACtx.createMediaElementSource(video);
+      const dst = state._expACtx.createMediaStreamDestination();
+      src.connect(dst);
+      src.connect(state._expACtx.destination);
+      state._expADst = dst;
+    }
+    if (state._expACtx.state === 'suspended') await state._expACtx.resume();
+    const aTracks = state._expADst.stream.getAudioTracks();
+    if (aTracks.length) {
+      finalStream = new MediaStream([...canvasStream.getVideoTracks(), ...aTracks]);
+    }
+  } catch(e) { console.warn('音频捕获跳过:', e); }
+
+  const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const recorder = new MediaRecorder(finalStream, { mimeType, videoBitsPerSecond: 8_000_000 });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    _exportBlob = new Blob(chunks, { type: 'video/webm' });
+    _exportURL  = URL.createObjectURL(_exportBlob);
+    document.getElementById('exportStatusText').textContent = '✅ 导出完成！';
+    document.getElementById('exportProgressFill').style.width = '100%';
+    document.getElementById('btnDownload').classList.remove('hidden');
+    showToast('🎉 导出完成！');
+  };
+
+  const totalDur = video.duration;
+  // 删除片段期间暂停录制器，保证时间轴准确
+  const onSeeking = () => { try { if (recorder.state === 'recording') recorder.pause(); } catch(e){} };
+  const onSeeked  = () => { try { if (recorder.state === 'paused')    recorder.resume(); } catch(e){} };
+  video.addEventListener('seeking', onSeeking);
+  video.addEventListener('seeked',  onSeeked);
+
+  video.pause();
+  video.currentTime = 0;
+  await new Promise(r => video.addEventListener('seeked', r, { once: true }));
+
+  recorder.start(100);
+
+  const msgs = ['处理视频流', '应用特效', '音频混合', '最终封装'];
+
+  function drawExportFrame() {
+    if (!video.videoWidth || video.seeking) {
+      requestAnimationFrame(drawExportFrame);
+      return;
+    }
+
+    // 绘制当前帧
+    ctx.drawImage(video, 0, 0, cw, ch);
+
+    // 应用缩放关键帧（放大镜效果）
+    const curPct = totalDur ? (video.currentTime / totalDur) * 100 : 0;
+    const az = zoomRanges.find(r => curPct >= r.startPct && curPct < r.endPct);
+    if (az) _drawZoomOverlay(ctx, offCanvas, video, 0.5, 0.5, az.ratio);
+
+    // 更新进度
+    const pct = Math.min(99, curPct);
+    document.getElementById('exportProgressFill').style.width = pct + '%';
+    document.getElementById('exportStatusText').textContent =
+      msgs[Math.min(Math.floor(pct / 25), 3)] + '... ' + Math.floor(pct) + '%';
+
+    if (video.ended) {
+      video.removeEventListener('seeking', onSeeking);
+      video.removeEventListener('seeked',  onSeeked);
+      setTimeout(() => recorder.stop(), 400);
+      return;
+    }
+    requestAnimationFrame(drawExportFrame);
+  }
+
+  video.play();
+  drawExportFrame();
 }
-function downloadFile(){
-  if(!state.blob) return;
-  const fmt=state.selectedFormat;
-  const ts=new Date().toISOString().slice(0,10);
-  const a=document.createElement('a'); a.href=state.videoURL;
-  if(fmt==='mp4'){
-    a.download=`screencraft-${ts}.mp4`;
-    showToast('⚠️ 已命名为 .mp4（VP9 编码），多数播放器可播放。如需 H.264 请用 FFmpeg 转码。','warn');
+
+function downloadFile() {
+  const blob = _exportBlob || state.blob;
+  const url  = _exportURL  || state.videoURL;
+  if (!blob) return;
+  const fmt = state.selectedFormat;
+  const ts  = new Date().toISOString().slice(0, 10);
+  const a   = document.createElement('a');
+  a.href = url;
+  if (fmt === 'mp4') {
+    a.download = `screencraft-${ts}.mp4`;
+    showToast('⚠️ 已命名为 .mp4（VP9 编码），多数播放器可播放。如需 H.264 请用 FFmpeg 转码。', 'warn');
   } else {
-    a.download=`screencraft-${ts}.webm`;
+    a.download = `screencraft-${ts}.webm`;
     showToast('⬇️ 下载 WebM...');
   }
   a.click();
