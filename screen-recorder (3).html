@@ -104,12 +104,20 @@
   .editor-layout{display:flex;flex-direction:column;gap:16px;}
   .timeline-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
   .timeline-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
-  .timeline{height:64px;background:var(--surface3);border-radius:var(--radius-sm);position:relative;overflow:hidden;cursor:crosshair;}
+  .timeline{height:84px;background:var(--surface3);border-radius:var(--radius-sm);position:relative;overflow:hidden;cursor:crosshair;}
   .tl-track{position:absolute;top:8px;left:0;right:0;height:20px;border-radius:4px;background:linear-gradient(90deg,rgba(108,99,255,.4),rgba(108,99,255,.7));}
   .tl-audio{position:absolute;top:36px;left:0;right:0;height:16px;border-radius:4px;background:linear-gradient(90deg,rgba(67,233,123,.3),rgba(67,233,123,.6));}
   .tl-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--accent2);pointer-events:none;left:0%;}
   .tl-selection{position:absolute;top:0;bottom:0;background:rgba(108,99,255,.15);border-left:2px solid var(--accent);border-right:2px solid var(--accent);pointer-events:none;display:none;}
   .tl-label{font-size:10px;color:var(--text2);position:absolute;top:0;padding:0 4px;}
+  /* 缩放关键帧轨道 */
+  .tl-zoom-track{position:absolute;top:62px;left:0;right:0;height:14px;}
+  .tl-zoom-range{position:absolute;height:100%;background:linear-gradient(90deg,rgba(108,99,255,.55),rgba(108,99,255,.75));border-radius:3px;cursor:grab;display:flex;align-items:center;overflow:hidden;border:1px solid rgba(108,99,255,.85);user-select:none;}
+  .tl-zoom-range:active{cursor:grabbing;}
+  .tl-zoom-handle{position:absolute;top:-1px;width:5px;height:calc(100% + 2px);background:rgba(108,99,255,1);cursor:ew-resize;border-radius:2px;z-index:2;}
+  .tl-zoom-handle-l{left:0;} .tl-zoom-handle-r{right:0;}
+  /* 已删除片段 */
+  .tl-deleted{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(255,107,107,.18),rgba(255,107,107,.18) 4px,transparent 4px,transparent 8px);border-left:2px solid rgba(255,107,107,.75);border-right:2px solid rgba(255,107,107,.75);pointer-events:none;}
   .edit-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .tool-btn{padding:6px 12px;border-radius:var(--radius-sm);background:var(--surface3);border:1px solid rgba(255,255,255,.08);color:var(--text2);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s;}
   .tool-btn:hover{border-color:var(--accent);color:var(--accent);}
@@ -397,11 +405,14 @@
               <div class="tl-label" style="left:0">0s</div><div class="tl-label" style="left:25%">25%</div>
               <div class="tl-label" style="left:50%;transform:translateX(-50%)">50%</div><div class="tl-label" style="right:0">100%</div>
               <div class="tl-track"></div><div class="tl-audio"></div>
-              <div class="tl-playhead" id="tlPlayhead"></div><div class="tl-selection" id="tlSelection"></div>
+              <div class="tl-playhead" id="tlPlayhead"></div>
+              <div class="tl-selection" id="tlSelection"></div>
+              <div id="tlZoomTrack" class="tl-zoom-track"></div>
             </div>
-            <div style="display:flex;gap:8px;margin-top:10px;">
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
               <button class="btn btn-outline" style="font-size:12px;" onclick="setInPoint()">[ 入点</button>
               <button class="btn btn-outline" style="font-size:12px;" onclick="setOutPoint()">出点 ]</button>
+              <button class="btn btn-outline" style="font-size:12px;" onclick="addZoomRange()">🔍 添加缩放</button>
               <button class="btn btn-danger" style="font-size:12px;margin-left:auto" onclick="deleteSelection()">🗑 删除片段</button>
             </div>
           </div>
@@ -913,8 +924,8 @@ function startCanvasPreview(canvas, video) {
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
 
-    // FIX 4: 智能放大镜（平滑 lerp + 真实放大）
-    if (state.zoomEnabled && document.getElementById('togZoom').classList.contains('on')) {
+    // 智能放大镜（平滑 lerp + 真实放大）— 直接以 togZoom 状态为准
+    if (document.getElementById('togZoom').classList.contains('on')) {
       drawZoomLens(ctx, canvas);
     }
   }
@@ -1019,7 +1030,10 @@ function drawZoomLens(ctx, canvas) {
 }
 
 function toggleZoom() {
-  state.zoomEnabled = !state.zoomEnabled;
+  // 同步 togZoom 开关状态与 state.zoomEnabled
+  const togEl = document.getElementById('togZoom');
+  togEl.classList.toggle('on');
+  state.zoomEnabled = togEl.classList.contains('on');
   document.getElementById('zoomBadge').classList.toggle('visible', state.zoomEnabled);
   showToast(state.zoomEnabled ? '🔍 智能放大已开启' : '🔍 智能放大已关闭');
 }
@@ -1211,6 +1225,9 @@ function toggleSpotlightEdit() {
 //  TIMELINE
 // ══════════════════════════════════════════════
 let _inPt=0, _outPt=100;
+let deletedRanges=[];  // [{startPct, endPct, start?, end?}]
+let zoomRanges=[];     // [{startPct, endPct, ratio}]
+
 function seekTimeline(e) {
   const tl=document.getElementById('timeline'),r=tl.getBoundingClientRect();
   const pct=((e.clientX-r.left)/r.width)*100;
@@ -1221,7 +1238,131 @@ function seekTimeline(e) {
 function setInPoint(){_inPt=parseFloat(document.getElementById('tlPlayhead').style.left)||0;_updateSel();showToast('[ 入点 '+_inPt.toFixed(1)+'%');}
 function setOutPoint(){_outPt=parseFloat(document.getElementById('tlPlayhead').style.left)||100;_updateSel();showToast('] 出点 '+_outPt.toFixed(1)+'%');}
 function _updateSel(){const s=document.getElementById('tlSelection');if(_outPt>_inPt){s.style.display='block';s.style.left=_inPt+'%';s.style.width=(_outPt-_inPt)+'%';}}
-function deleteSelection(){document.getElementById('tlSelection').style.display='none';_inPt=0;_outPt=100;showToast('🗑 片段已删除');}
+
+function deleteSelection() {
+  if (_outPt <= _inPt) { showToast('⚠️ 请先设置有效的入点和出点', 'warn'); return; }
+  const v = document.getElementById('editVideo');
+  const rangeData = { startPct: _inPt, endPct: _outPt, start: null, end: null };
+  if (v && v.duration) {
+    rangeData.start = (_inPt / 100) * v.duration;
+    rangeData.end   = (_outPt / 100) * v.duration;
+  }
+  deletedRanges.push(rangeData);
+  deletedRanges.sort((a, b) => a.startPct - b.startPct);
+  document.getElementById('tlSelection').style.display = 'none';
+  _renderDeletedRanges();
+  _inPt = 0; _outPt = 100;
+  showToast('🗑 片段已删除（播放时自动跳过）');
+}
+
+function _renderDeletedRanges() {
+  document.querySelectorAll('.tl-deleted').forEach(el => el.remove());
+  const tl = document.getElementById('timeline');
+  for (const r of deletedRanges) {
+    const el = document.createElement('div');
+    el.className = 'tl-deleted';
+    el.style.left  = r.startPct + '%';
+    el.style.width = (r.endPct - r.startPct) + '%';
+    tl.appendChild(el);
+  }
+}
+
+// 缩放关键帧轨道
+function addZoomRange() {
+  if (_outPt <= _inPt) { showToast('⚠️ 请先设置入点和出点', 'warn'); return; }
+  zoomRanges.push({ startPct: _inPt, endPct: _outPt, ratio: zoomCfg.ratio });
+  _renderZoomRanges();
+  showToast('🔍 缩放关键帧已添加 ' + zoomCfg.ratio + '×（右键可删除）');
+}
+
+function _renderZoomRanges() {
+  const track = document.getElementById('tlZoomTrack');
+  if (!track) return;
+  track.innerHTML = '';
+  for (let i = 0; i < zoomRanges.length; i++) {
+    const r = zoomRanges[i];
+    const el = document.createElement('div');
+    el.className = 'tl-zoom-range';
+    el.style.left  = r.startPct + '%';
+    el.style.width = (r.endPct - r.startPct) + '%';
+    el.title = `缩放 ${r.ratio}× | ${r.startPct.toFixed(0)}%→${r.endPct.toFixed(0)}% | 右键删除`;
+    el.innerHTML = `<span style="font-size:8px;color:#fff;padding:0 3px;white-space:nowrap;overflow:hidden;pointer-events:none;">${r.ratio}×</span>`;
+
+    const lh = document.createElement('div');
+    lh.className = 'tl-zoom-handle tl-zoom-handle-l';
+    lh.addEventListener('mousedown', e => { e.stopPropagation(); _dragZoomHandle(e, i, 'start'); });
+
+    const rh = document.createElement('div');
+    rh.className = 'tl-zoom-handle tl-zoom-handle-r';
+    rh.addEventListener('mousedown', e => { e.stopPropagation(); _dragZoomHandle(e, i, 'end'); });
+
+    el.appendChild(lh);
+    el.appendChild(rh);
+
+    el.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('tl-zoom-handle')) return;
+      _dragZoomRange(e, i);
+    });
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      zoomRanges.splice(i, 1);
+      _renderZoomRanges();
+      showToast('🗑 缩放关键帧已删除');
+    });
+    track.appendChild(el);
+  }
+}
+
+function _dragZoomHandle(e, idx, side) {
+  e.preventDefault();
+  const tlRect = document.getElementById('timeline').getBoundingClientRect();
+  const onMove = ev => {
+    const pct = Math.max(0, Math.min(100, ((ev.clientX - tlRect.left) / tlRect.width) * 100));
+    if (side === 'start') zoomRanges[idx].startPct = Math.min(pct, zoomRanges[idx].endPct - 2);
+    else                  zoomRanges[idx].endPct   = Math.max(pct, zoomRanges[idx].startPct + 2);
+    _renderZoomRanges();
+  };
+  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function _dragZoomRange(e, idx) {
+  e.preventDefault();
+  const tlRect = document.getElementById('timeline').getBoundingClientRect();
+  const startX = e.clientX;
+  const origS = zoomRanges[idx].startPct, origE = zoomRanges[idx].endPct;
+  const w = origE - origS;
+  const onMove = ev => {
+    const dx = ((ev.clientX - startX) / tlRect.width) * 100;
+    const ns = Math.max(0, Math.min(100 - w, origS + dx));
+    zoomRanges[idx].startPct = ns;
+    zoomRanges[idx].endPct   = ns + w;
+    _renderZoomRanges();
+  };
+  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// 播放时自动跳过已删除片段
+document.getElementById('editVideo').addEventListener('timeupdate', function() {
+  const v = this;
+  if (!v.duration) return;
+  for (const r of deletedRanges) {
+    if (r.start === null) { r.start = (r.startPct / 100) * v.duration; r.end = (r.endPct / 100) * v.duration; }
+    if (v.currentTime >= r.start && v.currentTime < r.end) { v.currentTime = r.end; break; }
+  }
+  // 同步时间轴播放头
+  const pct = (v.currentTime / v.duration) * 100;
+  document.getElementById('tlPlayhead').style.left = pct + '%';
+  const m = String(Math.floor(v.currentTime/60)).padStart(2,'0');
+  const s = String(Math.floor(v.currentTime%60)).padStart(2,'0');
+  const dm = String(Math.floor(v.duration/60)).padStart(2,'0');
+  const ds = String(Math.floor(v.duration%60)).padStart(2,'0');
+  document.getElementById('tlDuration').textContent = m+':'+s+' / '+dm+':'+ds;
+});
+
 function applyTrim(){showToast('✂️ 裁剪 '+_inPt.toFixed(0)+'% → '+_outPt.toFixed(0)+'%');}
 function splitClip(){showToast('🔪 在 '+(parseFloat(document.getElementById('tlPlayhead').style.left)||0).toFixed(1)+'% 处分割');}
 function applyAspect(v){if(v)showToast('📐 画幅 '+v);}
