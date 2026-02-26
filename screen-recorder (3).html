@@ -673,6 +673,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
     if(page==='export') updateExportInfo();
     if(page==='devices') enumerateDevices();
     if(page==='subtitle' && state.subtitles.length===0) seedSubtitles();
+    if(page==='edit') { const ev=document.getElementById('editVideo'); if(ev && ev.readyState>=1) startEditPreview(); }
   });
 });
 function toggle(el) { el.classList.toggle('on'); }
@@ -915,15 +916,14 @@ function startCanvasPreview(canvas, video) {
   if (state._previewRaf) cancelAnimationFrame(state._previewRaf);
   const ctx = canvas.getContext('2d');
 
-  // 追踪鼠标在 canvas 元素上的相对坐标
-  const box = document.getElementById('previewBox');
+  // 全局追踪鼠标在屏幕上的坐标，映射到录制内容坐标系
+  // 使用 screenX/screenY 使放大镜在录制全屏时自动跟随真实光标
   const onMouseMove = e => {
-    const r = canvas.getBoundingClientRect();
-    zoomSmooth.tx = (e.clientX - r.left) / r.width;
-    zoomSmooth.ty = (e.clientY - r.top) / r.height;
+    zoomSmooth.tx = e.screenX / screen.width;
+    zoomSmooth.ty = e.screenY / screen.height;
   };
-  box.addEventListener('mousemove', onMouseMove);
-  state._removeMouseMove = () => box.removeEventListener('mousemove', onMouseMove);
+  document.addEventListener('mousemove', onMouseMove);
+  state._removeMouseMove = () => document.removeEventListener('mousemove', onMouseMove);
 
   function drawFrame() {
     state._previewRaf = requestAnimationFrame(drawFrame);
@@ -1121,13 +1121,18 @@ function startEditPreview() {
   // 重置鼠标坐标
   editMouse.tx = 0.5; editMouse.ty = 0.5;
   editMouse.cx = 0.5; editMouse.cy = 0.5;
+  let _overVideo = false;
 
+  // 始终用容器 rect 计算坐标（canvas 隐藏时 getBoundingClientRect 返回 0）
   const onEditMouse = e => {
-    const r = canvas.getBoundingClientRect();
+    const r = container.getBoundingClientRect();
     editMouse.tx = (e.clientX - r.left) / r.width;
-    editMouse.ty = (e.clientY - r.top) / r.height;
+    editMouse.ty = (e.clientY - r.top)  / r.height;
+    _overVideo = true;
   };
+  const onEditLeave = () => { _overVideo = false; };
   container.addEventListener('mousemove', onEditMouse);
+  container.addEventListener('mouseleave', onEditLeave);
 
   function loop() {
     _editRaf = requestAnimationFrame(loop);
@@ -1138,16 +1143,18 @@ function startEditPreview() {
     editMouse.cy += (editMouse.ty - editMouse.cy) * 0.22;
 
     const curPct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+    // 优先使用当前时间对应的关键帧倍率，否则用全局配置
     const activeZoom = zoomRanges.find(r => curPct >= r.startPct && curPct < r.endPct);
+    const ratio = activeZoom ? activeZoom.ratio : zoomCfg.ratio;
 
-    if (activeZoom) {
+    // 鼠标悬停时始终显示放大镜（与录制预览行为一致）
+    if (_overVideo) {
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      _drawZoomOverlay(ctx, canvas, video, editMouse.cx, editMouse.cy, activeZoom.ratio);
+      _drawZoomOverlay(ctx, canvas, video, editMouse.cx, editMouse.cy, ratio);
       canvas.style.display = 'block';
     } else {
-      // 无激活缩放区间时隐藏 canvas 叠层
       if (canvas.style.display !== 'none') canvas.style.display = 'none';
     }
   }
